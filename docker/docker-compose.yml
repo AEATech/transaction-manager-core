@@ -1,0 +1,41 @@
+version: '3.3'
+services:
+    php-cli-8.2:
+        build:
+            context: 8.2/
+            args:
+                OWNER_USER: ${USER}
+                OWNER_USER_ID: 1000
+        command: php -r "while (true) { sleep(86400); }"
+        working_dir: /app
+        volumes:
+            - ../../transaction-manager-core:/app:rw
+            - /home/${USER}/.ssh:/home/${USER}/.ssh:ro
+        extra_hosts:
+            - 'host.docker.internal:host-gateway'
+    php-cli-8.3:
+        build:
+            context: 8.3/
+            args:
+                OWNER_USER: ${USER}
+                OWNER_USER_ID: 1000
+        command: php -r "while (true) { sleep(86400); }"
+        working_dir: /app
+        volumes:
+            - ../../transaction-manager-core:/app:rw
+            - /home/${USER}/.ssh:/home/${USER}/.ssh:ro
+        extra_hosts:
+            - 'host.docker.internal:host-gateway'
+    php-cli-8.4:
+        build:
+            context: 8.4/
+            args:
+                OWNER_USER: ${USER}
+                OWNER_USER_ID: 1000
+        command: php -r "while (true) { sleep(86400); }"
+        working_dir: /app
+        volumes:
+            - ../../transaction-manager-core:/app:rw
+            - /home/${USER}/.ssh:/home/${USER}/.ssh:ro
+        extra_hosts:
+            - 'host.docker.internal:host-gateway'
