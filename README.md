@@ -191,14 +191,12 @@ sequenceDiagram
         TM->>Conn: commit()
         Conn-->>TM: OK or Exception
 
-        alt commit succeeded
+        break commit succeeded
             TM-->>Caller: RunResult
-            break
         end
 
-        alt error during commit AND plan is non-idempotent
+        break error during commit AND plan is non-idempotent
             TM-->>Caller: throw UnknownCommitStateException
-            break
         end
 
         TM->>Conn: rollBack() (safe)
@@ -206,9 +204,8 @@ sequenceDiagram
         TM->>EC: classify(error)
         EC-->>TM: ErrorType
 
-        alt Fatal or retries exhausted
+        break Fatal or retries exhausted
             TM-->>Caller: throw error
-            break
         end
 
         alt Connection error
