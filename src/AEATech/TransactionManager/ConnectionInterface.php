@@ -19,25 +19,6 @@ interface ConnectionInterface
     public function beginTransaction(): void;
 
     /**
-     * @throws Throwable
-     */
-    public function commit(): void;
-
-    /**
-     * @throws Throwable
-     */
-    public function rollBack(): void;
-
-    /**
-     * Closes the underlying connection.
-     *
-     * Contract:
-     * - Used to force a fresh connection on the next operation (e.g., after a "MySQL gone away" error).
-     * - Subsequent calls to beginTransaction() MUST attempt to open a new connection.
-     */
-    public function close(): void;
-
-    /**
      * Sets the transaction isolation level.
      *
      * @throws Throwable
@@ -56,4 +37,23 @@ interface ConnectionInterface
      * @throws Throwable
      */
     public function executeStatement(string $sql, array $params = [], array $types = []): int;
+
+    /**
+     * @throws Throwable
+     */
+    public function commit(): void;
+
+    /**
+     * @throws Throwable
+     */
+    public function rollBack(): void;
+
+    /**
+     * Closes the underlying connection.
+     *
+     * Contract:
+     * - Used to force a fresh connection on the next operation (e.g., after a "MySQL gone away" error).
+     * - Subsequent calls to beginTransaction() MUST attempt to open a new connection.
+     */
+    public function close(): void;
 }
