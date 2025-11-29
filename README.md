@@ -260,3 +260,7 @@ for v in 8.2 8.3 8.4; do \
     docker-compose -p aeatech-transaction-manage-core -f docker/docker-compose.yml exec -T php-cli-$v vendor/bin/phpunit || break; \
 done
 ```
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](./LICENSE) file for details.
