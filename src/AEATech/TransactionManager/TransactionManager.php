@@ -35,7 +35,7 @@ class TransactionManager implements TransactionManagerInterface
                  */
                 $this->beginTransaction(allowReconnect: $attempt === 0);
 
-                $this->connection->setTransactionIsolation($opt->isolation);
+                $this->connection->setTransactionIsolationLevel($opt->isolationLevel);
 
                 foreach ($executionPlan->queries as $query) {
                     $total += $this->connection->executeStatement($query->sql, $query->params, $query->types);

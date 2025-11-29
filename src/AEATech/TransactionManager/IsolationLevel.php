@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace AEATech\TransactionManager;
 
-enum Isolation: string
+enum IsolationLevel: string
 {
     /**
      * Dirty reads OK

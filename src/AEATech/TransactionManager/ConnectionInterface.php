@@ -42,7 +42,7 @@ interface ConnectionInterface
      *
      * @throws Throwable
      */
-    public function setTransactionIsolation(Isolation $isolation): void;
+    public function setTransactionIsolationLevel(IsolationLevel $isolationLevel): void;
 
     /**
      * Executes a SQL statement and returns the number of affected rows.

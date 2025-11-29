@@ -207,9 +207,9 @@ Incorrect classification may cause:
 
 ---
 
-## 6. Isolation and Connection Lifetime
+## 6. IsolationLevel and Connection Lifetime
 
-1. **Transaction Isolation**
+1. **Transaction IsolationLevel**
 
     - TM calls `setTransactionIsolation()` on the provided `Connection` before executing any statements in a transaction
     - Depending on the driver/DBAL, this may:

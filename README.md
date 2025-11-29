@@ -25,7 +25,7 @@ MySQL and PostgreSQL integrations live in separate packages:
 - Automatically retry on transient errors (deadlocks, serialization failures)
 - Automatically recovers from connection drops
 - Handle `unknown commit outcome`
-- Isolation level control
+- IsolationLevel level control
 - Pure, deterministic execution plan
 - Backoff strategies (exponential with jitter)
 - Pluggable error classifiers per-database
@@ -138,7 +138,7 @@ $tm->run([
 ```php
 use AEATech\TransactionManager\RetryPolicy;
 use AEATech\TransactionManager\TxOptions;
-use AEATech\TransactionManager\Isolation;
+use AEATech\TransactionManager\IsolationLevel;
 use AEATech\TransactionManager\ExponentialBackoff;
 
 $retryPolicy = new RetryPolicy(
@@ -152,7 +152,7 @@ $retryPolicy = new RetryPolicy(
 );
 
 $options = new TxOptions(
-    isolation: Isolation::RepeatableRead,
+    isolationLevel: IsolationLevel::RepeatableRead,
     retryPolicy: $retryPolicy
 );
 

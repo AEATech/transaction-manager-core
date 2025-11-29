@@ -10,7 +10,7 @@ use AEATech\TransactionManager\ErrorType;
 use AEATech\TransactionManager\ExecutionPlan;
 use AEATech\TransactionManager\ExecutionPlanBuilderInterface;
 use AEATech\TransactionManager\Exception\UnknownCommitStateException;
-use AEATech\TransactionManager\Isolation;
+use AEATech\TransactionManager\IsolationLevel;
 use AEATech\TransactionManager\Query;
 use AEATech\TransactionManager\RetryPolicy;
 use AEATech\TransactionManager\SleeperInterface;
@@ -57,7 +57,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
         $this->builder->shouldReceive('build')->once()->andReturn($plan);
 
         $this->conn->shouldReceive('beginTransaction')->once();
-        $this->conn->shouldReceive('setTransactionIsolation')->once()->with(Isolation::RepeatableRead);
+        $this->conn->shouldReceive('setTransactionIsolationLevel')->once()->with(IsolationLevel::RepeatableRead);
         $this->conn->shouldReceive('executeStatement')->once()->with($q1->sql, $q1->params, $q1->types)->andReturn(1);
         $this->conn->shouldReceive('executeStatement')->once()->with($q2->sql, $q2->params, $q2->types)->andReturn(3);
         $this->conn->shouldReceive('commit')->once();
@@ -67,7 +67,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
         $this->sleeper->shouldNotReceive('sleep');
         $this->classifier->shouldNotReceive('classify');
 
-        $res = $this->tm->run([$this, $this], new TxOptions(Isolation::RepeatableRead)); // txs ignored by builder mock
+        $res = $this->tm->run([$this, $this], new TxOptions(IsolationLevel::RepeatableRead)); // txs ignored by builder mock
 
         self::assertSame(4, $res->affectedRows);
     }
@@ -86,7 +86,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
 
         $this->builder->shouldReceive('build')->once()->andReturn($plan);
         $this->conn->shouldReceive('beginTransaction')->once();
-        $this->conn->shouldReceive('setTransactionIsolation')->once()->with(Isolation::ReadCommitted);
+        $this->conn->shouldReceive('setTransactionIsolationLevel')->once()->with(IsolationLevel::ReadCommitted);
 
         $err = new RuntimeException('boom');
         $this->conn->shouldReceive('executeStatement')->once()->with($q1->sql, $q1->params, $q1->types)->andThrow($err);
@@ -115,7 +115,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
         $this->builder->shouldReceive('build')->once()->andReturn($plan);
 
         $this->conn->shouldReceive('beginTransaction')->once();
-        $this->conn->shouldReceive('setTransactionIsolation')->once()->with(Isolation::ReadCommitted);
+        $this->conn->shouldReceive('setTransactionIsolationLevel')->once()->with(IsolationLevel::ReadCommitted);
 
         $err = new RuntimeException('fatal');
         $this->conn->shouldReceive('executeStatement')->once()->andThrow($err);
@@ -146,7 +146,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
 
         // First attempt
         $this->conn->shouldReceive('beginTransaction')->once();
-        $this->conn->shouldReceive('setTransactionIsolation')->once()->with(Isolation::ReadCommitted);
+        $this->conn->shouldReceive('setTransactionIsolationLevel')->once()->with(IsolationLevel::ReadCommitted);
         $err = new RuntimeException('transient');
         $this->conn->shouldReceive('executeStatement')->once()->andThrow($err);
         $this->conn->shouldReceive('rollBack')->once();
@@ -162,13 +162,13 @@ class TransactionManagerTest extends TransactionManagerTestCase
 
         // Second attempt succeeds
         $this->conn->shouldReceive('beginTransaction')->once();
-        // Isolation set again each attempt
-        $this->conn->shouldReceive('setTransactionIsolation')->once()->with(Isolation::ReadCommitted);
+        // IsolationLevel set again each attempt
+        $this->conn->shouldReceive('setTransactionIsolationLevel')->once()->with(IsolationLevel::ReadCommitted);
         $this->conn->shouldReceive('executeStatement')->once()->andReturn(2);
         $this->conn->shouldReceive('commit')->once();
 
         $policy = new RetryPolicy(2, $backoff);
-        $res = $this->tm->run([$this], new TxOptions(Isolation::ReadCommitted, $policy));
+        $res = $this->tm->run([$this], new TxOptions(IsolationLevel::ReadCommitted, $policy));
 
         self::assertSame(2, $res->affectedRows);
     }
@@ -189,7 +189,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
 
         // Attempt 0 fails with a connection error
         $this->conn->shouldReceive('beginTransaction')->once();
-        $this->conn->shouldReceive('setTransactionIsolation')->once()->with(Isolation::ReadCommitted);
+        $this->conn->shouldReceive('setTransactionIsolationLevel')->once()->with(IsolationLevel::ReadCommitted);
         $err = new RuntimeException('conn');
         $this->conn->shouldReceive('executeStatement')->once()->andThrow($err);
         $this->conn->shouldReceive('rollBack')->once();
@@ -200,11 +200,11 @@ class TransactionManagerTest extends TransactionManagerTestCase
 
         // Attempt 1 OK
         $this->conn->shouldReceive('beginTransaction')->once();
-        $this->conn->shouldReceive('setTransactionIsolation')->once()->with(Isolation::ReadCommitted);
+        $this->conn->shouldReceive('setTransactionIsolationLevel')->once()->with(IsolationLevel::ReadCommitted);
         $this->conn->shouldReceive('executeStatement')->once()->andReturn(1);
         $this->conn->shouldReceive('commit')->once();
 
-        $res = $this->tm->run([$this], new TxOptions(Isolation::ReadCommitted, new RetryPolicy(1, $backoff)));
+        $res = $this->tm->run([$this], new TxOptions(IsolationLevel::ReadCommitted, new RetryPolicy(1, $backoff)));
         self::assertSame(1, $res->affectedRows);
     }
 
@@ -225,7 +225,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
         // Three attempts all fail with transient; policy allows 2 retries (maxRetries=2)
         // Attempt 0
         $this->conn->shouldReceive('beginTransaction')->once();
-        $this->conn->shouldReceive('setTransactionIsolation')->once()->with(Isolation::ReadCommitted);
+        $this->conn->shouldReceive('setTransactionIsolationLevel')->once()->with(IsolationLevel::ReadCommitted);
         $err0 = new RuntimeException('t0');
         $this->conn->shouldReceive('executeStatement')->once()->andThrow($err0);
         $this->conn->shouldReceive('rollBack')->once();
@@ -235,7 +235,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
 
         // Attempt 1
         $this->conn->shouldReceive('beginTransaction')->once();
-        $this->conn->shouldReceive('setTransactionIsolation')->once()->with(Isolation::ReadCommitted);
+        $this->conn->shouldReceive('setTransactionIsolationLevel')->once()->with(IsolationLevel::ReadCommitted);
         $err1 = new RuntimeException('t1');
         $this->conn->shouldReceive('executeStatement')->once()->andThrow($err1);
         $this->conn->shouldReceive('rollBack')->once();
@@ -245,7 +245,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
 
         // Attempt 2 (last allowed) fails and must be thrown (no further sleep)
         $this->conn->shouldReceive('beginTransaction')->once();
-        $this->conn->shouldReceive('setTransactionIsolation')->once()->with(Isolation::ReadCommitted);
+        $this->conn->shouldReceive('setTransactionIsolationLevel')->once()->with(IsolationLevel::ReadCommitted);
         $err2 = new RuntimeException('t2');
         $this->conn->shouldReceive('executeStatement')->once()->andThrow($err2);
         $this->conn->shouldReceive('rollBack')->once();
@@ -254,7 +254,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('t2');
 
-        $this->tm->run([$this], new TxOptions(Isolation::ReadCommitted, new RetryPolicy(2, $backoff)));
+        $this->tm->run([$this], new TxOptions(IsolationLevel::ReadCommitted, new RetryPolicy(2, $backoff)));
     }
 
     /**
@@ -270,7 +270,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
         $this->builder->shouldReceive('build')->once()->andReturn($plan);
 
         $this->conn->shouldReceive('beginTransaction')->once();
-        $this->conn->shouldReceive('setTransactionIsolation')->once()->with(Isolation::ReadCommitted);
+        $this->conn->shouldReceive('setTransactionIsolationLevel')->once()->with(IsolationLevel::ReadCommitted);
         $this->conn->shouldReceive('executeStatement')->once()->andReturn(1);
         $err = new RuntimeException('commit failed');
         $this->conn->shouldReceive('commit')->once()->andThrow($err);
@@ -300,7 +300,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
 
         // Attempt 0: executes fine, commit fails
         $this->conn->shouldReceive('beginTransaction')->once();
-        $this->conn->shouldReceive('setTransactionIsolation')->once()->with(Isolation::ReadCommitted);
+        $this->conn->shouldReceive('setTransactionIsolationLevel')->once()->with(IsolationLevel::ReadCommitted);
         $this->conn->shouldReceive('executeStatement')->once()->andReturn(1);
         $cErr = new RuntimeException('commit transient');
         $this->conn->shouldReceive('commit')->once()->andThrow($cErr);
@@ -311,11 +311,11 @@ class TransactionManagerTest extends TransactionManagerTestCase
 
         // Attempt 1: succeeds
         $this->conn->shouldReceive('beginTransaction')->once();
-        $this->conn->shouldReceive('setTransactionIsolation')->once()->with(Isolation::ReadCommitted);
+        $this->conn->shouldReceive('setTransactionIsolationLevel')->once()->with(IsolationLevel::ReadCommitted);
         $this->conn->shouldReceive('executeStatement')->once()->andReturn(1);
         $this->conn->shouldReceive('commit')->once();
 
-        $res = $this->tm->run([$this], new TxOptions(Isolation::ReadCommitted, new RetryPolicy(1, $backoff)));
+        $res = $this->tm->run([$this], new TxOptions(IsolationLevel::ReadCommitted, new RetryPolicy(1, $backoff)));
         self::assertSame(1, $res->affectedRows);
     }
 
@@ -342,7 +342,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
         $this->conn->shouldReceive('beginTransaction')->once()->andThrow($beginErr0);
         $this->conn->shouldReceive('close')->once();
         $this->conn->shouldReceive('beginTransaction')->once(); // retry begins
-        $this->conn->shouldReceive('setTransactionIsolation')->once()->with(Isolation::ReadCommitted);
+        $this->conn->shouldReceive('setTransactionIsolationLevel')->once()->with(IsolationLevel::ReadCommitted);
 
         $execErr = new RuntimeException('deadlock');
         $this->conn->shouldReceive('executeStatement')->once()->andThrow($execErr);
@@ -354,13 +354,13 @@ class TransactionManagerTest extends TransactionManagerTestCase
         // Second attempt: begin throws again, but now allowReconnect=false so it should propagate without close()
         $beginErr1 = new RuntimeException('begin fail attempt1');
         $this->conn->shouldReceive('beginTransaction')->once()->andThrow($beginErr1);
-        // safeRollback should swallow exceptions if any; we won't expect setTransactionIsolation on this path
+        // safeRollback should swallow exceptions if any; we won't expect setTransactionIsolationLevel on this path
         $this->conn->shouldReceive('rollBack')->once();
         $this->classifier->shouldReceive('classify')->once()->with($beginErr1)->andReturn(ErrorType::Fatal);
 
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('begin fail attempt1');
-        $this->tm->run([$this], new TxOptions(Isolation::ReadCommitted, new RetryPolicy(1, $backoff)));
+        $this->tm->run([$this], new TxOptions(IsolationLevel::ReadCommitted, new RetryPolicy(1, $backoff)));
     }
 
     /**
@@ -376,7 +376,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
         $this->builder->shouldReceive('build')->once()->andReturn($plan);
 
         $this->conn->shouldReceive('beginTransaction')->once();
-        $this->conn->shouldReceive('setTransactionIsolation')->once()->with(Isolation::ReadCommitted);
+        $this->conn->shouldReceive('setTransactionIsolationLevel')->once()->with(IsolationLevel::ReadCommitted);
         $execErr = new RuntimeException('exec');
         $this->conn->shouldReceive('executeStatement')->once()->andThrow($execErr);
         // rollBack itself throws, but TransactionManager must swallow it
