@@ -15,14 +15,14 @@ It describes what the Transaction Manager guarantees and what it *expects* from 
 
 The Transaction Manager (TM):
 
-- works **only with data-modifying SQL** (INSERT/UPDATE/DELETE/MERGE/…),
+- it works **only with data-modifying SQL** (INSERT/UPDATE/DELETE/MERGE/…),
 - executes **one logical transaction** over a single database connection
 - may **retry** the same logical transaction multiple times
 - is responsible for:
     - starting and finishing DB transactions
     - applying transaction isolation level
     - retrying on transient/connection errors using a backoff strategy
-    - detecting and signalling unknown commit outcome
+    - detecting and signaling unknown commit outcome
 
 The TM is **not** responsible for:
 
@@ -115,7 +115,6 @@ Given a `Connection`, an `ExecutionPlan`, and `TxOptions`, the Transaction Manag
 5. **Commit-unknown outcome handling**
 
    If an error is thrown during `commit()`:
-
     - and the `ExecutionPlan` is **non-idempotent** (`isIdempotent === false`)
       TM throws `UnknownCommitStateException`
       The caller **must** treat the DB state as undefined and resolve it manually
@@ -162,9 +161,9 @@ Authors of `TransactionInterface` implementations and higher-level code **must**
 2. **Pure `build()` method**
 
     - `build()` must:
-        - not depend on temporary mutable state
-        - not have side effects
-        - not change any external object state
+        - do not depend on a temporary mutable state
+        - do not have side effects
+        - do not change any external object state
     - Its only responsibility is to construct a `Query` object describing *what* should be executed
 
 3. **Correct idempotency declaration**
@@ -180,11 +179,20 @@ Authors of `TransactionInterface` implementations and higher-level code **must**
     - Other parts of the system:
         - must not start/commit/rollback their own transactions on the same connection concurrently
         - must be prepared that TM may call `close()` on the connection in case of connection-level errors
+   - Any code sharing the same `Connection` object must tolerate sudden reconnection
+     and must not rely on session-specific state surviving across `run()` calls.
 
 5. **No nesting on the same connection**
 
-    - TM is not designed to run **inside** an already active transaction on the same connection
-    - Calling `run()` while a transaction is already open on the connection is **undefined behavior**, regardless of DBAL savepoint settings
+    - TM is not designed to run **inside** an already active transaction on the same connection.
+    - Calling `run()` while the connection has an open transaction is **undefined behavior**.
+    - TM will detect this condition and throw a `LogicException` early if possible.
+
+6. **Isolation Level and Connection Lifetime Awareness**
+
+    - Authors must be aware that TM:
+        - may temporarily change the transaction isolation level;
+        - does **not** restore the previous isolation level after completion;
 
 ---
 
@@ -211,15 +219,43 @@ Incorrect classification may cause:
 
 1. **Transaction IsolationLevel**
 
-    - TM calls `setTransactionIsolation()` on the provided `Connection` before executing any statements in a transaction
-    - Depending on the driver/DBAL, this may:
-        - affect only the current transaction, or change the session-level isolation
-    - Users must assume that TM may temporarily change the isolation level of the underlying connection for the duration of `run()`
+    - TM applies the isolation level specified in `TxOptions` by calling `setTransactionIsolation()` on the underlying `Connection`.
+    - Depending on the database and driver, this may:
+        - apply only to the current transaction, or
+        - modify the session-level default isolation.
+    - **TM does not restore the previous isolation level** after `run()` completes.
+      Callers must assume that the isolation level may remain changed.
 
-2. **Closing the Connection**
+2. **Prohibition of Ambient Transactions**
 
-    - On `ErrorType::Connection`, TM calls `$connection->close()` and relies on DBAL to reconnect lazily on the next attempt
-    - Any code sharing the same `Connection` instance must be prepared for this behavior
+    - TM requires that the underlying connection is **not already in a transaction**.
+    - If an active transaction is detected, TM must throw `LogicException`.
+    - This invariant is necessary to enforce correct retry semantics and prevent partial commits
+      from interfering with outer business logic.
+
+3. **Closing the Connection**
+
+    - On `ErrorType::Connection`, TM **closes** the connection.
+    - DBAL is expected to lazily reconnect on the next connection use.
+    - Any code sharing the same `Connection` instance must:
+        - accept that TM may close it,
+        - do not rely on session state (temporary tables, variables, locks) being preserved.
+
+4. **No implicit reconnect inside an active transaction**
+
+    - The underlying `Connection` must **not** perform a transparent reconnecting while a transaction is active.
+    - Any connection loss during an open transaction must surface as an error
+      and be classified as `ErrorType::Connection`.
+    - This ensures that:
+        - a single logical attempt corresponds to exactly one physical DB transaction;
+        - retries are always executed as full transaction retries, not as a mix of
+          partial commits across multiple connections or transactions.
+    - Implementations that perform implicit reconnection must do so **only**
+      when no transaction is currently open.
+
+5. **Implementations of `ConnectionInterface` MUST NOT perform transparent reconnects while a transaction is active.**
+     Any such reconnected logic must be limited to the "no active transaction" state. Violating this invariantly 
+     breaks the retry semantics of the TransactionManager.
 
 ---
 

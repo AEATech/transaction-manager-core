@@ -3,24 +3,37 @@ declare(strict_types=1);
 
 namespace AEATech\TransactionManager;
 
+use LogicException;
 use Throwable;
 
+/**
+ * Minimal DB-connection abstraction used by TransactionManager.
+ *
+ * Contract:
+ * - May lazily establish or re-establish a physical connection when no
+ *   transaction is active.
+ * - Must NOT perform any implicit/transparent reconnecting while a transaction is active:
+ *   - If the physical connection is lost during an open transaction,
+ *     the next DB call (BEGIN/COMMIT/ROLLBACK/executeStatement/...) MUST
+ *     fail and surface the error to the caller.
+ *   - It is the TransactionManager's responsibility to classify such errors
+ *     as connection-level and decide whether to close/retry.
+ *
+ * Any implementation that performs reconnecting MUST do only when there is
+ * no active transaction on this logical ConnectionInterface.
+ */
 interface ConnectionInterface
 {
     /**
-     * Starts a transaction.
-     *
-     * Contract:
-     * - Must establish a connection if one is not currently active.
-     * - Must handle implicit reconnection if the driver supports it.
+     * @throws LogicException
+     *         Thrown when the transaction cannot be started due to an invalid state, for example,
+     *         - a transaction is already active on this connection
      *
      * @throws Throwable
      */
     public function beginTransaction(): void;
 
     /**
-     * Sets the transaction isolation level.
-     *
      * @throws Throwable
      */
     public function setTransactionIsolationLevel(IsolationLevel $isolationLevel): void;

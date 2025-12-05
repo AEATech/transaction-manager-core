@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace AEATech\TransactionManager;
 
 use AEATech\TransactionManager\Exception\UnknownCommitStateException;
+use LogicException;
 use Throwable;
 
 interface TransactionManagerInterface
@@ -40,6 +41,11 @@ interface TransactionManagerInterface
      * @return RunResult Contains execution results (e.g., affected rows)
      *
      * @throws UnknownCommitStateException
+     * @throws LogicException Thrown when the TransactionManager cannot safely take control over the database transaction
+     * — For example,
+     * - the underlying connection already has an active transaction
+     * (TransactionManager requires exclusive control over BEGIN/COMMIT/ROLLBACK);
+     *
      * @throws Throwable
      */
     public function run(TransactionInterface|iterable $txs, TxOptions $opt = new TxOptions()): RunResult;
