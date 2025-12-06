@@ -3,6 +3,9 @@ FROM php:8.3.24-cli-bullseye
 RUN apt-get update && \
     apt-get install -y libzip-dev wget git libssh2-1
 
+# Install PHP core extensions
+RUN docker-php-ext-install pdo_mysql
+
 # Install PHP pecl extensions
 RUN pecl install zip && \
     pecl install xdebug

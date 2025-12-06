@@ -15,7 +15,7 @@ MySQL and PostgreSQL integrations live in separate packages:
 
 - `transaction-manager-doctrine-adapter` (bridge for Doctrine DBAL)
 - `transaction-manager-mysql`
-- `transaction-manager-pg`
+- `transaction-manager-pgsql`
 
 ---
 
@@ -56,12 +56,13 @@ use AEATech\TransactionManager\SystemSleeper;
 use AEATech\TransactionManager\ExecutionPlanBuilder;
 use AEATech\TransactionManager\TransactionInterface;
 use AEATech\TransactionManager\Query;
+use AEATech\TransactionManager\GenericErrorClassifier;
 
 // Assume $connectionAdapter implements AEATech\TransactionManager\ConnectionInterface
 $connectionAdapter = '...';
 
 // Assume $errorClassifier implements AEATech\TransactionManager\ErrorClassifierInterface
-$errorClassifier = '...';
+$errorClassifier = new GenericErrorClassifier($errorHeuristics);
 
 $tm = new TransactionManager(
     new ExecutionPlanBuilder(),
@@ -228,37 +229,42 @@ The project is configured to run tests in Isolated Docker containers for differe
 Make sure the Docker containers are up and running. From the project root:
 
 ```bash
-docker-compose -p aeatech-transaction-manage-core -f docker/docker-compose.yml up -d --build
+docker-compose -p aeatech-transaction-manager-core -f docker/docker-compose.yml up -d --build
 ```
 
 ### 2. Install Dependencies
 Install composer dependencies inside the container (using PHP 8.2 as a base):
 ```bash
-docker-compose -p aeatech-transaction-manage-core -f docker/docker-compose.yml exec php-cli-8.2 composer install
+docker-compose -p aeatech-transaction-manager-core -f docker/docker-compose.yml exec php-cli-8.2 composer install
 ```
 
 # 3. Run Tests
 PHP 8.2
 ```bash
-docker-compose -p aeatech-transaction-manage-core -f docker/docker-compose.yml exec php-cli-8.2 vendor/bin/phpunit
+docker-compose -p aeatech-transaction-manager-core -f docker/docker-compose.yml exec php-cli-8.2 vendor/bin/phpunit
 ```
 
 PHP 8.3
 ```bash
-docker-compose -p aeatech-transaction-manage-core -f docker/docker-compose.yml exec php-cli-8.3 vendor/bin/phpunit
+docker-compose -p aeatech-transaction-manager-core -f docker/docker-compose.yml exec php-cli-8.3 vendor/bin/phpunit
 ```
 
 PHP 8.4
 ```bash
-docker-compose -p aeatech-transaction-manage-core -f docker/docker-compose.yml exec php-cli-8.4 vendor/bin/phpunit
+docker-compose -p aeatech-transaction-manager-core -f docker/docker-compose.yml exec php-cli-8.4 vendor/bin/phpunit
 ```
 
 ### 4. Run All Tests (Bash Script)
 ```bash
 for v in 8.2 8.3 8.4; do \
     echo "Testing PHP $v..."; \
-    docker-compose -p aeatech-transaction-manage-core -f docker/docker-compose.yml exec -T php-cli-$v vendor/bin/phpunit || break; \
+    docker-compose -p aeatech-transaction-manager-core -f docker/docker-compose.yml exec php-cli-$v vendor/bin/phpunit || break; \
 done
+```
+
+## Stopping the Environment
+```bash
+docker-compose -p aeatech-transaction-manager-core -f docker/docker-compose.yml down -v
 ```
 
 ## License

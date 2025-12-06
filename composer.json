@@ -6,7 +6,8 @@
     "sort-packages": true
   },
   "require": {
-    "php": ">=8.2"
+    "php": ">=8.2",
+    "ext-pdo": "*"
   },
   "require-dev": {
     "mockery/mockery": "^1.6.10",
