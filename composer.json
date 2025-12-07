@@ -1,34 +1,40 @@
 {
-  "name": "aeatech/transaction-manager-core",
-  "description": "Transaction manager core",
-  "license": "MIT",
-  "config": {
-    "sort-packages": true
-  },
-  "require": {
-    "php": ">=8.2",
-    "ext-pdo": "*"
-  },
-  "require-dev": {
-    "mockery/mockery": "^1.6.10",
-    "phpunit/phpunit": "^11.5",
-    "roave/security-advisories": "dev-master"
-  },
-  "autoload": {
-    "psr-4": {
-      "AEATech\\TransactionManager\\": "src/AEATech/TransactionManager"
-    }
-  },
-  "autoload-dev": {
-    "psr-4": {
-       "AEATech\\Test\\TransactionManager\\": "tests/AEATech/Test/TransactionManager"
-    }
-  },
-  "archive": {
-    "exclude": [
-      "/docker",
-      "/tests",
-      "/phpunit.xml"
+    "name": "aeatech/transaction-manager-core",
+    "description": "Transaction manager core",
+    "license": "MIT",
+    "config": {
+        "sort-packages": true
+    },
+    "require": {
+        "php": ">=8.2",
+        "ext-pdo": "*"
+    },
+    "require-dev": {
+        "mockery/mockery": "^1.6.10",
+        "phpunit/phpunit": "^11.5",
+        "roave/security-advisories": "dev-master"
+    },
+    "autoload": {
+        "psr-4": {
+            "AEATech\\TransactionManager\\": "src/AEATech/TransactionManager"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "AEATech\\Test\\TransactionManager\\": "tests/AEATech/Test/TransactionManager"
+        }
+    },
+    "archive": {
+        "exclude": [
+            "/docker",
+            "/tests",
+            "/phpunit.xml"
+        ]
+    },
+    "keywords": [
+        "transaction",
+        "transaction-manager",
+        "database",
+        "sql"
     ]
-  }
 }
