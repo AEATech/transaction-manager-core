@@ -7,9 +7,10 @@ services:
                 OWNER_USER: ${USER}
                 OWNER_USER_ID: 1000
         command: php -r "while (true) { sleep(86400); }"
-        working_dir: /app
+        working_dir: /app/packages/transaction-manager-core
         volumes:
-            - ../../transaction-manager-core:/app:rw
+            # Mount the ENTIRE monorepo to /app
+            - ../../..:/app:rw
             - /home/${USER}/.ssh:/home/${USER}/.ssh:ro
         extra_hosts:
             - 'host.docker.internal:host-gateway'
@@ -20,9 +21,9 @@ services:
                 OWNER_USER: ${USER}
                 OWNER_USER_ID: 1000
         command: php -r "while (true) { sleep(86400); }"
-        working_dir: /app
+        working_dir: /app/packages/transaction-manager-core
         volumes:
-            - ../../transaction-manager-core:/app:rw
+            - ../../..:/app:rw
             - /home/${USER}/.ssh:/home/${USER}/.ssh:ro
         extra_hosts:
             - 'host.docker.internal:host-gateway'
@@ -33,9 +34,9 @@ services:
                 OWNER_USER: ${USER}
                 OWNER_USER_ID: 1000
         command: php -r "while (true) { sleep(86400); }"
-        working_dir: /app
+        working_dir: /app/packages/transaction-manager-core
         volumes:
-            - ../../transaction-manager-core:/app:rw
+            - ../../..:/app:rw
             - /home/${USER}/.ssh:/home/${USER}/.ssh:ro
         extra_hosts:
             - 'host.docker.internal:host-gateway'
