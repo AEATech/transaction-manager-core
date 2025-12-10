@@ -33,9 +33,7 @@ class TransactionManager implements TransactionManagerInterface
                  * that the connection might have timed out ("gone away") in a long-running worker.
                  * In this case, we make one reconnection attempt "for free" (without incrementing the attempt counter).
                  */
-                $this->beginTransaction(allowReconnect: $attempt === 0);
-
-                $this->connection->setTransactionIsolationLevel($opt->isolationLevel);
+                $this->beginTransaction($opt, allowReconnect: $attempt === 0);
 
                 foreach ($executionPlan->queries as $query) {
                     $total += $this->connection->executeStatement($query->sql, $query->params, $query->types);
@@ -92,10 +90,10 @@ class TransactionManager implements TransactionManagerInterface
      *
      * @throws Throwable
      */
-    private function beginTransaction(bool $allowReconnect): void
+    private function beginTransaction(TxOptions $opt, bool $allowReconnect): void
     {
         try {
-            $this->connection->beginTransaction();
+            $this->connection->beginTransactionWithOptions($opt);
         } catch (Throwable $e) {
             if ($allowReconnect) {
                 /**
@@ -104,7 +102,7 @@ class TransactionManager implements TransactionManagerInterface
                  * Connection will automatically reconnect on the next beginTransaction call.
                  */
                 $this->connection->close();
-                $this->connection->beginTransaction();
+                $this->connection->beginTransactionWithOptions($opt);
             } else {
                 throw $e;
             }

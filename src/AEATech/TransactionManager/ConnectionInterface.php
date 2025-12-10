@@ -25,18 +25,23 @@ use Throwable;
 interface ConnectionInterface
 {
     /**
+     * Starts a transaction applying the provided options atomically.
+     * Implementations MUST ensure the isolation level is applied ONLY to the current transaction
+     * (no session-level leakage) and use DB-specific safe sequences, e.g.:
+     * - MySQL: START TRANSACTION ISOLATION LEVEL ...
+     * - PostgreSQL: BEGIN; SET TRANSACTION ISOLATION LEVEL ...
+     *
+     * If a transaction is already active, implementations MAY:
+     * - apply the isolation level to the current transaction if the DB supports it (e.g., PostgreSQL), or
+     * - throw a LogicException if not supported (e.g., MySQL).
+     *
      * @throws LogicException
      *         Thrown when the transaction cannot be started due to an invalid state, for example,
      *         - a transaction is already active on this connection
      *
      * @throws Throwable
      */
-    public function beginTransaction(): void;
-
-    /**
-     * @throws Throwable
-     */
-    public function setTransactionIsolationLevel(IsolationLevel $isolationLevel): void;
+    public function beginTransactionWithOptions(TxOptions $opt): void;
 
     /**
      * Executes a SQL statement and returns the number of affected rows.
