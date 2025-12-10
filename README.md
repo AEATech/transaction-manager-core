@@ -15,7 +15,7 @@ MySQL and PostgreSQL integrations live in separate packages:
 
 - `transaction-manager-doctrine-adapter` (bridge for Doctrine DBAL)
 - `transaction-manager-mysql`
-- `transaction-manager-pgsql`
+- `transaction-manager-postgresql`
 
 ---
 
