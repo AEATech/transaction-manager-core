@@ -188,12 +188,6 @@ Authors of `TransactionInterface` implementations and higher-level code **must**
     - Calling `run()` while the connection has an open transaction is **undefined behavior**.
     - TM will detect this condition and throw a `LogicException` early if possible.
 
-6. **Isolation Level and Connection Lifetime Awareness**
-
-    - Authors must be aware that TM:
-        - may temporarily change the transaction isolation level;
-        - does **not** restore the previous isolation level after completion;
-
 ---
 
 ## 5. ErrorClassifier Contract
@@ -217,23 +211,14 @@ Incorrect classification may cause:
 
 ## 6. IsolationLevel and Connection Lifetime
 
-1. **Transaction IsolationLevel**
-
-    - TM applies the isolation level specified in `TxOptions` by calling `setTransactionIsolation()` on the underlying `Connection`.
-    - Depending on the database and driver, this may:
-        - apply only to the current transaction, or
-        - modify the session-level default isolation.
-    - **TM does not restore the previous isolation level** after `run()` completes.
-      Callers must assume that the isolation level may remain changed.
-
-2. **Prohibition of Ambient Transactions**
+1. **Prohibition of Ambient Transactions**
 
     - TM requires that the underlying connection is **not already in a transaction**.
     - If an active transaction is detected, TM must throw `LogicException`.
     - This invariant is necessary to enforce correct retry semantics and prevent partial commits
       from interfering with outer business logic.
 
-3. **Closing the Connection**
+2. **Closing the Connection**
 
     - On `ErrorType::Connection`, TM **closes** the connection.
     - DBAL is expected to lazily reconnect on the next connection use.
@@ -241,7 +226,7 @@ Incorrect classification may cause:
         - accept that TM may close it,
         - do not rely on session state (temporary tables, variables, locks) being preserved.
 
-4. **No implicit reconnect inside an active transaction**
+3. **No implicit reconnect inside an active transaction**
 
     - The underlying `Connection` must **not** perform a transparent reconnecting while a transaction is active.
     - Any connection loss during an open transaction must surface as an error
@@ -252,10 +237,6 @@ Incorrect classification may cause:
           partial commits across multiple connections or transactions.
     - Implementations that perform implicit reconnection must do so **only**
       when no transaction is currently open.
-
-5. **Implementations of `ConnectionInterface` MUST NOT perform transparent reconnects while a transaction is active.**
-     Any such reconnected logic must be limited to the "no active transaction" state. Violating this invariantly 
-     breaks the retry semantics of the TransactionManager.
 
 ---
 
