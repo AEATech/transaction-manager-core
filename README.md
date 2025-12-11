@@ -179,10 +179,8 @@ sequenceDiagram
     EPB-->>TM: ExecutionPlan
 
     loop retries
-        TM->>Conn: beginTransaction()
+        TM->>Conn: beginTransactionWithOptions()
         Conn-->>TM: OK or Exception
-
-        TM->>Conn: setTransactionIsolation()
 
         loop each Query
             TM->>Conn: executeStatement(sql, params, types)
