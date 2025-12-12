@@ -19,7 +19,7 @@ interface TransactionManagerInterface
      * Flow:
      * 0. Pre-build: Before the DB transaction starts, collect a Query list via tx.build() (no I/O)
      * 1. BEGIN TRANSACTION with a specified isolation level
-     * 2. Execute all prepared Queries using executeStatement()
+     * 2. Execute all prepared Queries using executeQuery()
      * 3. COMMIT with UnknownCommit detection
      * 4. On error: rollback and retry if transient error (retry doesn't rebuild Queries)
      *

@@ -14,7 +14,7 @@ use Throwable;
  *   transaction is active.
  * - Must NOT perform any implicit/transparent reconnecting while a transaction is active:
  *   - If the physical connection is lost during an open transaction,
- *     the next DB call (BEGIN/COMMIT/ROLLBACK/executeStatement/...) MUST
+ *     the next DB call (BEGIN/COMMIT/ROLLBACK/executeQuery/...) MUST
  *     fail and surface the error to the caller.
  *   - It is the TransactionManager's responsibility to classify such errors
  *     as connection-level and decide whether to close/retry.
@@ -46,15 +46,13 @@ interface ConnectionInterface
     /**
      * Executes a SQL statement and returns the number of affected rows.
      *
-     * @param string $sql
-     * @param array $params
-     * @param array $types Driver-specific types
+     * @param Query $query
      *
      * @return int Number of affected rows
      *
      * @throws Throwable
      */
-    public function executeStatement(string $sql, array $params = [], array $types = []): int;
+    public function executeQuery(Query $query): int;
 
     /**
      * @throws Throwable

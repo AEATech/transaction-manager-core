@@ -59,8 +59,8 @@ class TransactionManagerTest extends TransactionManagerTestCase
         $this->builder->shouldReceive('build')->once()->andReturn($plan);
 
         $this->mockBeginTransactionWithOptions($opt);
-        $this->conn->shouldReceive('executeStatement')->once()->with($q1->sql, $q1->params, $q1->types)->andReturn(1);
-        $this->conn->shouldReceive('executeStatement')->once()->with($q2->sql, $q2->params, $q2->types)->andReturn(3);
+        $this->conn->shouldReceive('executeQuery')->once()->with($q1)->andReturn(1);
+        $this->conn->shouldReceive('executeQuery')->once()->with($q2)->andReturn(3);
         $this->conn->shouldReceive('commit')->once();
 
         // No retries, so no sleeper/backoff, no rollback
@@ -75,7 +75,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
     }
 
     /**
-     * When executeStatement throws a transient error and no RetryPolicy provided,
+     * When executeQuery throws a transient error and no RetryPolicy provided,
      * it must roll back and rethrow immediately.
      *
      * @throws Throwable
@@ -162,7 +162,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
             }));
 
         // Second attempt succeeds
-        $this->conn->shouldReceive('executeStatement')->once()->andReturn(2);
+        $this->conn->shouldReceive('executeQuery')->once()->andReturn(2);
         $this->conn->shouldReceive('commit')->once();
 
         $res = $this->tm->run([$this], $opt);
@@ -195,7 +195,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
         $this->sleeper->shouldReceive('sleep')->once();
 
         // Attempt 1 OK
-        $this->conn->shouldReceive('executeStatement')->once()->andReturn(1);
+        $this->conn->shouldReceive('executeQuery')->once()->andReturn(1);
         $this->conn->shouldReceive('commit')->once();
 
 
@@ -261,7 +261,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
 
         $this->mockBeginTransactionWithOptions($opt);
 
-        $this->conn->shouldReceive('executeStatement')->once()->andReturn(1);
+        $this->conn->shouldReceive('executeQuery')->once()->andReturn(1);
         $err = new RuntimeException('commit failed');
         $this->conn->shouldReceive('commit')->once()->andThrow($err);
         $this->conn->shouldReceive('rollBack')->once();
@@ -293,14 +293,14 @@ class TransactionManagerTest extends TransactionManagerTestCase
         $this->mockBeginTransactionWithOptions($opt, 2);
 
         // Attempt 0: executes fine, commit fails
-        $this->conn->shouldReceive('executeStatement')->once()->andReturn(1);
+        $this->conn->shouldReceive('executeQuery')->once()->andReturn(1);
         $cErr = new RuntimeException('commit transient');
         $this->expectCommitThrowsRollbackThenClassify($cErr);
         $backoff->shouldReceive('delay')->once()->with(0)->andReturn(Duration::milliseconds(1));
         $this->sleeper->shouldReceive('sleep')->once();
 
         // Attempt 1: succeeds
-        $this->conn->shouldReceive('executeStatement')->once()->andReturn(1);
+        $this->conn->shouldReceive('executeQuery')->once()->andReturn(1);
         $this->conn->shouldReceive('commit')->once();
 
 
@@ -372,7 +372,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
         $this->mockBeginTransactionWithOptions($opt);
 
         $execErr = new RuntimeException('exec');
-        $this->conn->shouldReceive('executeStatement')->once()->andThrow($execErr);
+        $this->conn->shouldReceive('executeQuery')->once()->andThrow($execErr);
         // rollBack itself throws, but TransactionManager must swallow it
         $this->conn->shouldReceive('rollBack')->once()->andThrow(new RuntimeException('rb fail'));
 
@@ -393,9 +393,9 @@ class TransactionManagerTest extends TransactionManagerTestCase
 
     private function expectExecThrowsAndRollbackThenClassify(Throwable $err, ErrorType $type, ?Query $q = null): void
     {
-        $exp = $this->conn->shouldReceive('executeStatement')->once();
+        $exp = $this->conn->shouldReceive('executeQuery')->once();
         if ($q !== null) {
-            $exp->with($q->sql, $q->params, $q->types);
+            $exp->with($q);
         }
         $exp->andThrow($err);
 
