@@ -50,6 +50,7 @@ Contract:
         - `sql` (string)
         - `params` (array)
         - `types` (array)
+        - `statementReusePolicy` (enum `StatementReusePolicy`) — optional hint for prepared statement reuse (defaults to `None`)
 
 - `isIdempotent(): bool`
     - describes **idempotency of the *effect* on the database**, not of the method call itself:
@@ -165,6 +166,7 @@ Authors of `TransactionInterface` implementations and higher-level code **must**
         - do not have side effects
         - do not change any external object state
     - Its only responsibility is to construct a `Query` object describing *what* should be executed
+    - Optionally, the author may set `statementReusePolicy` in `Query` as a performance hint
 
 3. **Correct idempotency declaration**
 
@@ -250,7 +252,29 @@ It does **not** include any effects from failed attempts, which are always rolle
 
 ---
 
-## 8. Summary
+## 8. StatementReusePolicy (Hint for prepared statement reuse)
+
+`StatementReusePolicy` is an optional, best‑effort hint passed via `Query` that may help connection adapters optimize prepared statement usage.
+
+- It is a performance hint only; correctness must not depend on it.
+- Implementations of `ConnectionInterface` may:
+  - follow the hint fully or partially; or
+  - ignore it (e.g., due to driver limitations, reconnections, prepared‑statement invalidation, disabled caching, etc.).
+
+Policy options:
+
+- `None` — no prepared statement reuse (default).
+- `PerTransaction` — attempt to reuse a prepared statement within a single physical transaction.
+- `PerConnection` — attempt to reuse a prepared statement across transactions while the physical connection remains open.
+
+Notes:
+
+- The hint may be ignored at any time (e.g., on reconnection).
+- Transaction authors must not rely on it for retry/idempotency semantics — only for potential performance improvements.
+
+---
+
+## 9. Summary
 
 By following this contract:
 

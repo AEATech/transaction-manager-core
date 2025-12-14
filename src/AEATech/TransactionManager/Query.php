@@ -9,6 +9,7 @@ class Query
         public readonly string $sql,
         public readonly array $params = [],
         public readonly array $types = [],
+        public readonly StatementReusePolicy $statementReusePolicy = StatementReusePolicy::None
     ) {
     }
 }

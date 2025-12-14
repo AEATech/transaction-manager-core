@@ -29,7 +29,7 @@ MySQL and PostgreSQL integrations live in separate packages:
 - Pure, deterministic execution plan
 - Backoff strategies (exponential with jitter)
 - Pluggable error classifiers per-database
-- Zero prepared-statement caching (simple and safe)
+- Optional prepared statement reuse via `StatementReusePolicy` (disabled by default)
 - No global state, no magic
 
 ---
@@ -158,6 +158,43 @@ $options = new TxOptions(
 );
 
 $tm->run($transaction, $options);
+```
+
+# Prepared Statement Reuse Hint
+
+`StatementReusePolicy` is an optional, best‑effort hint that may help a connection adapter optimize execution of similar queries. It does not affect correctness and may be ignored by an implementation.
+
+Options:
+
+- `StatementReusePolicy::None` — no reuse (default).
+- `StatementReusePolicy::PerTransaction` — attempt to reuse a prepared statement within a single transaction.
+- `StatementReusePolicy::PerConnection` — attempt to reuse a prepared statement across transactions while the physical connection remains open.
+
+Example usage in `TransactionInterface::build()`:
+
+```php
+use AEATech\TransactionManager\Query;
+use AEATech\TransactionManager\StatementReusePolicy;
+
+class InsertUser implements TransactionInterface
+{
+    public function __construct(
+        private string $email,
+        private string $name
+    ) {}
+
+    public function build(): Query
+    {
+        return new Query(
+            sql: "INSERT INTO users (email, name) VALUES (?, ?)",
+            params: [$this->email, $this->name],
+            types: [\PDO::PARAM_STR, \PDO::PARAM_STR],
+            statementReusePolicy: StatementReusePolicy::PerTransaction
+        );
+    }
+
+    public function isIdempotent(): bool { return false; }
+}
 ```
 
 # Sequence Diagram (Execution Flow)
