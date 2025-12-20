@@ -47,4 +47,15 @@ class DurationTest extends TransactionManagerTestCase
         self::assertSame(TimeUnit::Milliseconds, $duration->unit, 'Unit should be milliseconds');
         self::assertSame(150_000, $duration->toMicroseconds(), 'Conversion to microseconds should be correct');
     }
+
+    #[Test]
+    public function zero(): void
+    {
+        $duration = Duration::zero();
+
+        self::assertSame(0, $duration->value);
+        self::assertSame(TimeUnit::Microseconds, $duration->unit);
+
+        self::assertSame(0, $duration->toMicroseconds());
+    }
 }

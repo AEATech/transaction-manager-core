@@ -20,4 +20,9 @@ class Duration
     {
         return new self($value, TimeUnit::Milliseconds);
     }
+
+    public static function zero(): self
+    {
+        return new self(0, TimeUnit::Microseconds);
+    }
 }

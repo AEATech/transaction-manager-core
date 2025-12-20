@@ -13,10 +13,10 @@ class TxOptions
      *   `SET TRANSACTION ISOLATION LEVEL ...` and the effective isolation level
      *   is whatever is currently configured for the connection/database
      *   (database default, pool/session settings, previous session-level changes, etc.).
-     * - If $retryPolicy is null, the transaction is executed exactly once (no retries).
+     * - If $retryPolicy is null, TM uses its configured default retry policy.
      *
-     * @param IsolationLevel|null $isolationLevel Optional explicit isolation level for the transaction.
-     * @param RetryPolicy|null $retryPolicy - Optional retry policy.
+     * @param IsolationLevel|null $isolationLevel
+     * @param RetryPolicy|null $retryPolicy
      */
     public function __construct(
         public readonly ?IsolationLevel $isolationLevel = null,

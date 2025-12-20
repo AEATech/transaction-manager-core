@@ -28,6 +28,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
     private ConnectionInterface $conn;
     private ErrorClassifierInterface $classifier;
     private SleeperInterface $sleeper;
+    private RetryPolicy $defaultRetryPolicy;
     private TransactionManager $tm;
 
     protected function setUp(): void
@@ -38,8 +39,15 @@ class TransactionManagerTest extends TransactionManagerTestCase
         $this->conn = m::mock(ConnectionInterface::class);
         $this->classifier = m::mock(ErrorClassifierInterface::class);
         $this->sleeper = m::mock(SleeperInterface::class);
+        $this->defaultRetryPolicy = RetryPolicy::noRetry();
 
-        $this->tm = new TransactionManager($this->builder, $this->conn, $this->classifier, $this->sleeper);
+        $this->tm = new TransactionManager(
+            $this->builder,
+            $this->conn,
+            $this->classifier,
+            $this->defaultRetryPolicy,
+            $this->sleeper
+        );
     }
 
     /**
@@ -380,6 +388,141 @@ class TransactionManagerTest extends TransactionManagerTestCase
 
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('exec');
+
+        $this->tm->run([$this], $opt);
+    }
+
+    /**
+     * Verifies that the defaultRetryPolicy provided in the constructor is used when TxOptions doesn't override it.
+     *
+     * @throws Throwable
+     */
+    #[Test]
+    public function usesDefaultRetryPolicyFromConstructor(): void
+    {
+        $backoff = m::mock(BackoffStrategyInterface::class);
+        $defaultPolicy = new RetryPolicy(1, $backoff);
+
+        // Re-create TM with a specific default policy
+        $this->tm = new TransactionManager(
+            $this->builder,
+            $this->conn,
+            $this->classifier,
+            $defaultPolicy,
+            $this->sleeper
+        );
+
+        $q = new Query('Q');
+        $plan = new ExecutionPlan(true, [$q]);
+        $this->builder->shouldReceive('build')->once()->andReturn($plan);
+
+        $opt = new TxOptions(); // No retry policy in options
+
+        // First attempt fails, second succeeds (because defaultPolicy has maxRetries=1)
+        $this->mockBeginTransactionWithOptions($opt, 2);
+
+        $err = new RuntimeException('transient');
+        $this->expectExecThrowsAndRollbackThenClassify($err, ErrorType::Transient);
+
+        $backoff->shouldReceive('delay')->once()->with(0)->andReturn(Duration::milliseconds(1));
+        $this->sleeper->shouldReceive('sleep')->once();
+
+        $this->conn->shouldReceive('executeQuery')->once()->andReturn(1);
+        $this->conn->shouldReceive('commit')->once();
+
+        $res = $this->tm->run([$this], $opt);
+        self::assertSame(1, $res->affectedRows);
+    }
+
+    /**
+     * Verifies that the retryPolicy in TxOptions overrides the defaultRetryPolicy.
+     *
+     * @throws Throwable
+     */
+    #[Test]
+    public function txOptionsOverrideDefaultRetryPolicy(): void
+    {
+        // Constructor policy: no retries
+        $this->tm = new TransactionManager(
+            $this->builder,
+            $this->conn,
+            $this->classifier,
+            RetryPolicy::noRetry(),
+            $this->sleeper
+        );
+
+        $backoff = m::mock(BackoffStrategyInterface::class);
+        $customPolicy = new RetryPolicy(1, $backoff);
+
+        $q = new Query('Q');
+        $plan = new ExecutionPlan(true, [$q]);
+        $this->builder->shouldReceive('build')->once()->andReturn($plan);
+
+        // Options policy: 1 retry
+        $opt = new TxOptions(retryPolicy: $customPolicy);
+
+        $this->mockBeginTransactionWithOptions($opt, 2);
+
+        $err = new RuntimeException('transient');
+        $this->expectExecThrowsAndRollbackThenClassify($err, ErrorType::Transient);
+
+        $backoff->shouldReceive('delay')->once()->with(0)->andReturn(Duration::milliseconds(1));
+        $this->sleeper->shouldReceive('sleep')->once();
+
+        $this->conn->shouldReceive('executeQuery')->once()->andReturn(1);
+        $this->conn->shouldReceive('commit')->once();
+
+        $res = $this->tm->run([$this], $opt);
+        self::assertSame(1, $res->affectedRows);
+    }
+
+    /**
+     * Verifies the semantic of maxRetries: total executions = 1 + maxRetries.
+     * Example: maxRetries = 2 -> 3 total attempts.
+     *
+     * @throws Throwable
+     */
+    #[Test]
+    public function verifiesMaxRetriesSemantic(): void
+    {
+        $backoff = m::mock(BackoffStrategyInterface::class);
+        $policy = new RetryPolicy(2, $backoff); // 2 additional retries -> 3 attempts total
+
+        $this->tm = new TransactionManager(
+            $this->builder,
+            $this->conn,
+            $this->classifier,
+            $policy,
+            $this->sleeper
+        );
+
+        $q = new Query('Q');
+        $plan = new ExecutionPlan(true, [$q]);
+        $this->builder->shouldReceive('build')->once()->andReturn($plan);
+
+        $opt = new TxOptions();
+
+        // 3 attempts total
+        $this->mockBeginTransactionWithOptions($opt, 3);
+
+        // Attempt 0 fails
+        $err0 = new RuntimeException('fail0');
+        $this->expectExecThrowsAndRollbackThenClassify($err0, ErrorType::Transient);
+        $backoff->shouldReceive('delay')->once()->with(0)->andReturn(Duration::milliseconds(1));
+        $this->sleeper->shouldReceive('sleep')->once();
+
+        // Attempt 1 fails
+        $err1 = new RuntimeException('fail1');
+        $this->expectExecThrowsAndRollbackThenClassify($err1, ErrorType::Transient);
+        $backoff->shouldReceive('delay')->once()->with(1)->andReturn(Duration::milliseconds(1));
+        $this->sleeper->shouldReceive('sleep')->once();
+
+        // Attempt 2 fails and propagates (exhausted)
+        $err2 = new RuntimeException('fail2');
+        $this->expectExecThrowsAndRollbackThenClassify($err2, ErrorType::Transient);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('fail2');
 
         $this->tm->run([$this], $opt);
     }

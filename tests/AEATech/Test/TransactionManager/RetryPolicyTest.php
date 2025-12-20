@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace AEATech\Test\TransactionManager;
 
 use AEATech\TransactionManager\BackoffStrategyInterface;
+use AEATech\TransactionManager\NoBackoffStrategy;
 use AEATech\TransactionManager\RetryPolicy;
 use InvalidArgumentException;
 use Mockery as m;
@@ -13,6 +14,28 @@ use Throwable;
 
 class RetryPolicyTest extends TransactionManagerTestCase
 {
+    #[Test]
+    #[DataProvider('newInstanceDataProvider')]
+    public function newInstance(int $maxRetries): void
+    {
+        $backoffStrategy = m::mock(BackoffStrategyInterface::class);
+        $policy = new RetryPolicy($maxRetries, $backoffStrategy);
+
+        self::assertSame($maxRetries, $policy->maxRetries);
+    }
+
+    public static function newInstanceDataProvider(): array
+    {
+        return [
+            [
+                'maxRetries' => 0,
+            ],
+            [
+                'maxRetries' => 1,
+            ],
+        ];
+    }
+
     /**
      * @throws Throwable
      */
@@ -22,7 +45,7 @@ class RetryPolicyTest extends TransactionManagerTestCase
     {
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage(
-            'Max retries must be at least 1. If you do not want retries, do not use a RetryPolicy.'
+            'maxRetries must be >= 0'
         );
 
         new RetryPolicy($maxRetries, m::mock(BackoffStrategyInterface::class));
@@ -32,11 +55,17 @@ class RetryPolicyTest extends TransactionManagerTestCase
     {
         return [
             [
-                'maxRetries' => 0,
-            ],
-            [
                 'maxRetries' => -1,
-            ]
+            ],
         ];
+    }
+
+    #[Test]
+    public function noRetry(): void
+    {
+        $policy = RetryPolicy::noRetry();
+
+        self::assertSame(0, $policy->maxRetries);
+        self::assertEquals(new NoBackoffStrategy(), $policy->backoffStrategy);
     }
 }

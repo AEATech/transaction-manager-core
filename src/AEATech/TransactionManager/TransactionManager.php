@@ -12,6 +12,7 @@ class TransactionManager implements TransactionManagerInterface
         private readonly ExecutionPlanBuilderInterface $executionPlanBuilder,
         private readonly ConnectionInterface $connection,
         private readonly ErrorClassifierInterface $errorClassifier,
+        private readonly RetryPolicy $defaultRetryPolicy,
         private readonly SleeperInterface $sleeper
     ) {
     }
@@ -63,12 +64,19 @@ class TransactionManager implements TransactionManagerInterface
                     throw $e;
                 }
 
+                $retryPolicy = $opt->retryPolicy ?? $this->defaultRetryPolicy;
+
                 /**
-                 * If RetryPolicy is not set, maxRetries = 0.
-                 * If the attempt (0) >= 0 -> condition is met, throw an exception (no retries).
-                 * If RetryPolicy is set (e.g., 3), then attempt (0) >= 3 -> false, proceed to retry.
+                 * Check if we have exceeded the maximum number of allowed retries.
+                 *
+                 * Example with maxRetries = 3:
+                 * - Attempt 0 (initial run): fails -> 0 >= 3 is false -> retry allowed.
+                 * - Attempt 1 (1st retry):   fails -> 1 >= 3 is false -> retry allowed.
+                 * - Attempt 2 (2nd retry):   fails -> 2 >= 3 is false -> retry allowed.
+                 * - Attempt 3 (3rd retry):   fails -> 3 >= 3 is true  -> throw exception.
+                 * Total executions: 1 (initial) + 3 (retries) = 4.
                  */
-                if ($opt->retryPolicy === null || $attempt >= $opt->retryPolicy->maxRetries) {
+                if ($attempt >= $retryPolicy->maxRetries) {
                     throw $e;
                 }
 
@@ -76,7 +84,7 @@ class TransactionManager implements TransactionManagerInterface
                     $this->connection->close();
                 }
 
-                $this->sleeper->sleep($opt->retryPolicy->backoffStrategy->delay($attempt));
+                $this->sleeper->sleep($retryPolicy->backoffStrategy->delay($attempt));
 
                 $attempt++;
             }

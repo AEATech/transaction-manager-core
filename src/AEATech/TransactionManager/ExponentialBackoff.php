@@ -51,7 +51,6 @@ class ExponentialBackoff implements BackoffStrategyInterface
         $delayMs = min($this->maxDelayMs, $this->baseDelayMs * ($this->multiplier ** $attempt));
         $jitterMs = random_int(0, $this->jitterMs);
 
-        /** @noinspection UnnecessaryCastingInspection */
-        return Duration::milliseconds((int)($delayMs + $jitterMs));
+        return Duration::milliseconds((int)round(($delayMs + $jitterMs)));
     }
 }

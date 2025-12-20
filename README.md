@@ -68,6 +68,7 @@ $tm = new TransactionManager(
     new ExecutionPlanBuilder(),
     $connectionAdapter,
     $errorClassifier,
+    RetryPolicy::noRetry(), // Default retry policy
     new SystemSleeper()
 );
 
@@ -134,7 +135,44 @@ $tm->run([
 ]);
 ```
 
-# Retry Options Example
+# Retry Options
+
+Transaction Manager uses a **default retry policy** configured during instantiation. You can override this policy for specific transactions using `TxOptions`.
+
+### 1. Default Retry Policy
+
+When you create the `TransactionManager`, you must provide a default policy. 
+
+**Note on `maxRetries`**: The value specifies the number of *additional* attempts after the initial failure. For example, `maxRetries: 3` means the transaction can be executed up to **4 times** in total (1 initial attempt + 3 retries).
+
+```php
+$defaultPolicy = new RetryPolicy(
+    maxRetries: 3, // Total 4 attempts
+    backoffStrategy: new ExponentialBackoff(baseDelayMs: 100)
+);
+
+$tm = new TransactionManager(
+    $builder,
+    $connection,
+    $classifier,
+    $defaultPolicy,
+    $sleeper
+);
+```
+
+### 2. Disabling Retries
+
+If you want to ensure a transaction is executed exactly once without any retries, use `RetryPolicy::noRetry()`:
+
+```php
+// Globally (in constructor)
+$tm = new TransactionManager(..., RetryPolicy::noRetry(), ...);
+
+// Or for a specific call
+$tm->run($tx, new TxOptions(retryPolicy: RetryPolicy::noRetry()));
+```
+
+### 3. Overriding Policy per Call
 
 ```php
 use AEATech\TransactionManager\RetryPolicy;
@@ -142,19 +180,14 @@ use AEATech\TransactionManager\TxOptions;
 use AEATech\TransactionManager\IsolationLevel;
 use AEATech\TransactionManager\ExponentialBackoff;
 
-$retryPolicy = new RetryPolicy(
-    maxRetries: 3,
-    backoffStrategy: new ExponentialBackoff(
-        baseDelayMs: 10,
-        maxDelayMs: 500,
-        multiplier: 2.0,
-        jitterMs: 60
-    )
+$customPolicy = new RetryPolicy(
+    maxRetries: 5, // Total 6 attempts
+    backoffStrategy: new ExponentialBackoff(baseDelayMs: 50)
 );
 
 $options = new TxOptions(
     isolationLevel: IsolationLevel::RepeatableRead,
-    retryPolicy: $retryPolicy
+    retryPolicy: $customPolicy // Overrides the default policy
 );
 
 $tm->run($transaction, $options);
@@ -175,7 +208,7 @@ $tm->run($transaction, $options);
 ```php
 $options = new TxOptions(
     isolationLevel: IsolationLevel::RepeatableRead,
-    retryPolicy: $retryPolicy
+    retryPolicy: $customPolicy
 );
 
 $tm->run($transaction, $options);
@@ -183,10 +216,10 @@ $tm->run($transaction, $options);
 
 ### Retry without changing isolation level (use DB/connection default)
 
-```
+```php
 $options = new TxOptions(
     isolationLevel: null,
-    retryPolicy: $retryPolicy
+    retryPolicy: $customPolicy
 );
 
 $tm->run($transaction, $options);

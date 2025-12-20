@@ -11,10 +11,15 @@ class RetryPolicy
         public readonly int $maxRetries,
         public readonly BackoffStrategyInterface $backoffStrategy
     ) {
-        if ($this->maxRetries < 1) {
+        if ($this->maxRetries < 0) {
             throw new InvalidArgumentException(
-                'Max retries must be at least 1. If you do not want retries, do not use a RetryPolicy.'
+                'maxRetries must be >= 0'
             );
         }
+    }
+
+    public static function noRetry(): self
+    {
+        return new self(0, new NoBackoffStrategy());
     }
 }
