@@ -10,8 +10,11 @@ interface TransactionInterface
     /**
      * Requirements:
      * - MUST return the same Query on repeated calls (stateless/pure, deterministic)
-     * - Does NOT perform I/O and does not access DB/network (pure function)
      * - Called BEFORE DB transaction starts and is NOT called again on retries (build() result is cached during run)
+     * - EXCEPT when the class is marked with #[DeferredBuild] attribute:
+     *   - build() is called INSIDE the active DB transaction
+     *   - it MAY perform I/O (e.g., SELECT) through shared repositories
+     *   - it is called on EVERY retry (to allow re-fetching changed DB state)
      *
      * @throws Throwable
      */

@@ -42,10 +42,14 @@ A `TransactionInterface` describes **one logical DB operation**.
 Contract:
 
 - `build(): Query`
-    - must be a **pure function**:
+    - for standard transactions, must be a **pure function**:
         - no external side effects
         - no hidden mutable state
         - for the same inputs it must always return the same `Query`
+    - for transactions marked with `#[DeferredBuild]`:
+        - is called **inside** the active DB transaction
+        - may perform read-only I/O (e.g., SELECT via repository) to fetch data from previous steps
+        - must still avoid non-DB side effects (HTTP, files, etc.)
     - returns a `Query` object containing:
         - `sql` (string)
         - `params` (array)
@@ -59,21 +63,25 @@ Contract:
 
 ### 2.2 ExecutionPlan & ExecutionPlanBuilder
 
-`ExecutionPlan` represents a **fixed list of queries** to be executed as a single transaction:
+`ExecutionPlan` represents an ordered sequence of operations (steps) to be executed as a single transaction:
 
-- `queries: Query[]`
+- `steps: (Query|TransactionInterface)[]`
+- `getQueries(): iterable<Query>` — a generator that yields `Query` objects. For `DeferredBuild` transactions, it calls `build()` on the fly.
 - `isIdempotent: bool` — logical AND of all underlying transactions’ `isIdempotent()`.
 
 `ExecutionPlanBuilder::build(iterable|TransactionInterface $txs)`:
 
 - is called **exactly once** per `TransactionManager::run()` call.
 - must:
-    - call `build()` on each `TransactionInterface` once
-    - collect all `Query` objects into an ordered list
+    - check for `#[DeferredBuild]` attribute on each `TransactionInterface`
+    - for standard transactions: call `build()` once and store the `Query`
+    - for `DeferredBuild` transactions: store the transaction object itself to be built later
+    - collect all steps into an ordered list
     - compute `isIdempotent` as a conjunction of all transaction idempotency flags
     - throw if the iterable is empty or contains non-TransactionInterface items
 
-After the plan is built, **no further `build()` calls occur on retries**.
+For standard transactions, no further `build()` calls occur on retries.
+For `DeferredBuild` transactions, `build()` is called on every retry attempt.
 
 ---
 
@@ -102,8 +110,9 @@ Given a `Connection`, an `ExecutionPlan`, and `TxOptions`, the Transaction Manag
         - `TxOptions.retryPolicy` is configured and the retry limit has not been exhausted
     - On each retry:
         - a fresh physical DB transaction is started
-        - the same queries are executed in the same order
-        - isolation level is reapplied.
+        - isolation level is reapplied
+        - the queries are yielded from the plan's `getQueries()` and executed in the same order
+        - (Note: `DeferredBuild` transactions will have their `build()` method re-invoked during this process)
             
 4. **Connection Recovery ("Gone Away" handling)**
     
@@ -161,10 +170,13 @@ Authors of `TransactionInterface` implementations and higher-level code **must**
 
 2. **Pure `build()` method**
 
-    - `build()` must:
+    - For standard transactions, `build()` must:
         - do not depend on a temporary mutable state
         - do not have side effects
         - do not change any external object state
+    - For `#[DeferredBuild]` transactions:
+        - it may perform read operations from the database to adapt to the current state
+        - it must still remain free of non-DB side effects
     - Its only responsibility is to construct a `Query` object describing *what* should be executed
     - Optionally, the author may set `statementReusePolicy` in `Query` as a performance hint
 

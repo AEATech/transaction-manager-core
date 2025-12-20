@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace AEATech\Test\TransactionManager;
 
+use AEATech\TransactionManager\Attribute\DeferredBuild;
 use AEATech\TransactionManager\ExecutionPlanBuilder;
 use AEATech\TransactionManager\Query;
 use AEATech\TransactionManager\TransactionInterface;
@@ -31,10 +32,11 @@ class ExecutionPlanBuilderTest extends TransactionManagerTestCase
         $tx->shouldReceive('isIdempotent')->once()->andReturn($idempotent);
 
         $plan = $builder->build($tx);
+        $queries = iterator_to_array($plan->getQueries());
 
         self::assertSame($idempotent, $plan->isIdempotent);
-        self::assertCount(1, $plan->queries);
-        self::assertSame($query, $plan->queries[0]);
+        self::assertCount(1, $queries);
+        self::assertSame($query, $queries[0]);
     }
 
     public static function singleTransactionDataProvider(): array
@@ -65,9 +67,10 @@ class ExecutionPlanBuilderTest extends TransactionManagerTestCase
         $t2->shouldReceive('isIdempotent')->once()->andReturn(false);
 
         $plan = $builder->build([$t1, $t2]);
+        $queries = iterator_to_array($plan->getQueries());
 
         self::assertFalse($plan->isIdempotent, 'Idempotency must be aggregated via logical AND');
-        self::assertSame([$q1, $q2], $plan->queries);
+        self::assertSame([$q1, $q2], $queries);
     }
 
     /**
@@ -123,5 +126,29 @@ class ExecutionPlanBuilderTest extends TransactionManagerTestCase
         $this->expectExceptionMessage('boom');
 
         $builder->build([$t1, $t2]);
+    }
+
+    /**
+     * @throws Throwable
+     */
+    #[Test]
+    public function buildDoesNotCallBuildForDeferredTransaction(): void
+    {
+        $builder = new ExecutionPlanBuilder();
+
+        $tx = new #[DeferredBuild] class implements TransactionInterface {
+            public function build(): Query { throw new RuntimeException('Should not be called'); }
+            public function isIdempotent(): bool { return true; }
+        };
+
+        $plan = $builder->build($tx);
+
+        self::assertTrue($plan->isIdempotent);
+
+        // build() is only called during iteration
+        $iterator = $plan->getQueries();
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Should not be called');
+        iterator_to_array($iterator);
     }
 }

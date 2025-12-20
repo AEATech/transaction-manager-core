@@ -6,6 +6,9 @@ namespace AEATech\Test\TransactionManager;
 use AEATech\TransactionManager\BackoffStrategyInterface;
 use AEATech\TransactionManager\ConnectionInterface;
 use AEATech\TransactionManager\ErrorClassifierInterface;
+use AEATech\TransactionManager\Attribute\DeferredBuild;
+use AEATech\TransactionManager\NoBackoffStrategy;
+use AEATech\TransactionManager\TransactionInterface;
 use AEATech\TransactionManager\ErrorType;
 use AEATech\TransactionManager\ExecutionPlan;
 use AEATech\TransactionManager\ExecutionPlanBuilderInterface;
@@ -60,7 +63,7 @@ class TransactionManagerTest extends TransactionManagerTestCase
     {
         $q1 = new Query('INSERT ...', ['a' => 1], ['a' => 'int']);
         $q2 = new Query('UPDATE ...', ['id' => 5], ['id' => 'int']);
-        $plan = new ExecutionPlan(isIdempotent: true, queries: [$q1, $q2]);
+        $plan = new ExecutionPlan(isIdempotent: true, steps: [$q1, $q2]);
 
         $opt = new TxOptions(IsolationLevel::RepeatableRead);
 
@@ -525,6 +528,47 @@ class TransactionManagerTest extends TransactionManagerTestCase
         $this->expectExceptionMessage('fail2');
 
         $this->tm->run([$this], $opt);
+    }
+
+    /**
+     * @throws Throwable
+     */
+    #[Test]
+    public function deferredBuildCalledInsideTransactionOnEveryRetry(): void
+    {
+        $q1 = new Query('INSERT 1');
+        $q2 = new Query('INSERT 2');
+
+        $tx = new #[DeferredBuild] class($q1, $q2) implements TransactionInterface {
+            public int $calls = 0;
+            public function __construct(private Query $q1, private Query $q2) {}
+            public function build(): Query {
+                $this->calls++;
+                return $this->calls === 1 ? $this->q1 : $this->q2;
+            }
+            public function isIdempotent(): bool { return true; }
+        };
+
+        $this->builder->shouldReceive('build')->once()->andReturn(
+            new ExecutionPlan(true, [$tx])
+        );
+
+        // First attempt fails during execution
+        $this->conn->shouldReceive('beginTransactionWithOptions')->twice();
+        $this->conn->shouldReceive('executeQuery')->with($q1)->once()->andThrow(new RuntimeException('transient'));
+        $this->classifier->shouldReceive('classify')->once()->andReturn(ErrorType::Transient);
+        $this->sleeper->shouldReceive('sleep')->once();
+
+        // Second attempt succeeds
+        $this->conn->shouldReceive('executeQuery')->with($q2)->once()->andReturn(1);
+        $this->conn->shouldReceive('commit')->once();
+        $this->conn->shouldReceive('rollBack')->once(); // for the first attempt
+
+        $opt = new TxOptions(retryPolicy: new RetryPolicy(1, new NoBackoffStrategy()));
+        $result = $this->tm->run($tx, $opt);
+
+        self::assertSame(1, $result->affectedRows);
+        self::assertSame(2, $tx->calls, 'build() should be called on every attempt');
     }
 
     private function mockBeginTransactionWithOptions(TxOptions $options, int $times = 1): void

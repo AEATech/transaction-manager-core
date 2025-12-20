@@ -3,14 +3,32 @@ declare(strict_types=1);
 
 namespace AEATech\TransactionManager;
 
+use Throwable;
+
 class ExecutionPlan
 {
     public function __construct(
         public readonly bool $isIdempotent,
         /**
-         * @var Query[]
+         * @var array<Query|TransactionInterface>
          */
-        public readonly array $queries
+        private readonly array $steps = []
     ) {
+    }
+
+    /**
+     * @return iterable<Query>
+     *
+     * @throws Throwable
+     */
+    public function getQueries(): iterable
+    {
+        foreach ($this->steps as $step) {
+            if ($step instanceof TransactionInterface) {
+                yield $step->build();
+            } else {
+                yield $step;
+            }
+        }
     }
 }
