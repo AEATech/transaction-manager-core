@@ -160,6 +160,38 @@ $options = new TxOptions(
 $tm->run($transaction, $options);
 ```
 
+# Isolation level (optional)
+
+`TxOptions::$isolationLevel` is optional.
+
+- If `isolationLevel` is `null`, Transaction Manager does **not** issue
+  `SET TRANSACTION ISOLATION LEVEL ...` and the effective isolation level is whatever is currently configured
+  for the connection/database (server default, pool/session settings, etc.).
+- If `isolationLevel` is set (e.g. `ReadCommitted`, `RepeatableRead`, `Serializable`),
+  Transaction Manager will explicitly set it for the current transaction.
+
+### Retry with explicit isolation level
+
+```php
+$options = new TxOptions(
+    isolationLevel: IsolationLevel::RepeatableRead,
+    retryPolicy: $retryPolicy
+);
+
+$tm->run($transaction, $options);
+```
+
+### Retry without changing isolation level (use DB/connection default)
+
+```
+$options = new TxOptions(
+    isolationLevel: null,
+    retryPolicy: $retryPolicy
+);
+
+$tm->run($transaction, $options);
+```
+
 # Prepared Statement Reuse Hint
 
 `StatementReusePolicy` is an optional, best‑effort hint that may help a connection adapter optimize execution of similar queries. It does not affect correctness and may be ignored by an implementation.
@@ -195,64 +227,6 @@ class InsertUser implements TransactionInterface
 
     public function isIdempotent(): bool { return false; }
 }
-```
-
-# Sequence Diagram (Execution Flow)
-
-```mermaid
-sequenceDiagram
-    autonumber
-
-    actor Caller
-    participant TM as TransactionManager
-    participant EPB as ExecutionPlanBuilder
-    participant Conn as DB ConnectionInterface
-    participant EC as ErrorClassifier
-    participant Backoff as BackoffStrategy
-    participant Sleeper as Sleeper
-
-    Caller->>TM: run(transactions, options)
-    TM->>EPB: build(transactions)
-    EPB-->>TM: ExecutionPlan
-
-    loop retries
-        TM->>Conn: beginTransactionWithOptions()
-        Conn-->>TM: OK or Exception
-
-        loop each Query
-            TM->>Conn: executeStatement(sql, params, types)
-            Conn-->>TM: OK or Exception
-        end
-
-        TM->>Conn: commit()
-        Conn-->>TM: OK or Exception
-
-        break commit succeeded
-            TM-->>Caller: RunResult
-        end
-
-        break error during commit AND plan is non-idempotent
-            TM-->>Caller: throw UnknownCommitStateException
-        end
-
-        TM->>Conn: rollBack() (safe)
-
-        TM->>EC: classify(error)
-        EC-->>TM: ErrorType
-
-        break Fatal or retries exhausted
-            TM-->>Caller: throw error
-        end
-
-        alt Connection error
-            TM->>Conn: close()
-        end
-
-        TM->>Backoff: delay(attempt)
-        Backoff-->>TM: Duration
-
-        TM->>Sleeper: sleep(Duration)
-    end
 ```
 
 # Testing
