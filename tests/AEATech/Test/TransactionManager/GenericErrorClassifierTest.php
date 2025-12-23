@@ -7,14 +7,18 @@ use AEATech\TransactionManager\DatabaseErrorHeuristicsInterface;
 use AEATech\TransactionManager\ErrorType;
 use AEATech\TransactionManager\GenericErrorClassifier;
 use Mockery as m;
+use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
 use PDOException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
 #[CoversClass(GenericErrorClassifier::class)]
-class GenericErrorClassifierTest extends TransactionManagerTestCase
+class GenericErrorClassifierTest extends TestCase
 {
+    use MockeryPHPUnitIntegration;
+
     private DatabaseErrorHeuristicsInterface $heuristics;
     private GenericErrorClassifier $classifier;
 

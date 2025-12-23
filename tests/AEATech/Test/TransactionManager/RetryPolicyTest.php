@@ -8,12 +8,18 @@ use AEATech\TransactionManager\NoBackoffStrategy;
 use AEATech\TransactionManager\RetryPolicy;
 use InvalidArgumentException;
 use Mockery as m;
+use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\TestCase;
 use Throwable;
 
-class RetryPolicyTest extends TransactionManagerTestCase
+#[CoversClass(RetryPolicy::class)]
+class RetryPolicyTest extends TestCase
 {
+    use MockeryPHPUnitIntegration;
+
     #[Test]
     #[DataProvider('newInstanceDataProvider')]
     public function newInstance(int $maxRetries): void

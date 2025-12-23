@@ -4,11 +4,17 @@ declare(strict_types=1);
 namespace AEATech\Test\TransactionManager;
 
 use AEATech\TransactionManager\TimeUnit;
+use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\TestCase;
 
-class TimeUnitTest extends TransactionManagerTestCase
+#[CoversClass(TimeUnit::class)]
+class TimeUnitTest extends TestCase
 {
+    use MockeryPHPUnitIntegration;
+
     #[Test]
     #[DataProvider('toMicrosecondsDataProvider')]
     public function toMicrosecondsConvertsCorrectly(int $value, TimeUnit $unit, int $expectedMicroseconds): void

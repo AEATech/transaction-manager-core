@@ -6,12 +6,18 @@ namespace AEATech\Test\TransactionManager;
 use AEATech\TransactionManager\ExponentialBackoff;
 use AEATech\TransactionManager\TimeUnit;
 use InvalidArgumentException;
+use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\TestCase;
 use Throwable;
 
-class ExponentialBackoffTest extends TransactionManagerTestCase
+#[CoversClass(ExponentialBackoff::class)]
+class ExponentialBackoffTest extends TestCase
 {
+    use MockeryPHPUnitIntegration;
+
     /**
      * @throws Throwable
      */

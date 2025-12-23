@@ -7,10 +7,12 @@ use AEATech\TransactionManager\IsolationLevel;
 use AEATech\TransactionManager\RetryPolicy;
 use AEATech\TransactionManager\TxOptions;
 use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Mockery as m;
 
+#[CoversClass(TxOptions::class)]
 class TxOptionsTest extends TestCase
 {
     use MockeryPHPUnitIntegration;

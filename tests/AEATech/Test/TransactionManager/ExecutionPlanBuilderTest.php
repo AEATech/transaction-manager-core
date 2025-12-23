@@ -4,18 +4,25 @@ declare(strict_types=1);
 namespace AEATech\Test\TransactionManager;
 
 use AEATech\TransactionManager\Attribute\DeferredBuild;
+use AEATech\TransactionManager\ExecutionPlan;
 use AEATech\TransactionManager\ExecutionPlanBuilder;
 use AEATech\TransactionManager\Query;
 use AEATech\TransactionManager\TransactionInterface;
 use InvalidArgumentException;
 use Mockery as m;
+use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Throwable;
 
-class ExecutionPlanBuilderTest extends TransactionManagerTestCase
+#[CoversClass(ExecutionPlanBuilder::class)]
+#[CoversClass(ExecutionPlan::class)]
+class ExecutionPlanBuilderTest extends TestCase
 {
+    use MockeryPHPUnitIntegration;
 
     /**
      * @throws Throwable

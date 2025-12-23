@@ -8,6 +8,7 @@ use AEATech\TransactionManager\ConnectionInterface;
 use AEATech\TransactionManager\ErrorClassifierInterface;
 use AEATech\TransactionManager\Attribute\DeferredBuild;
 use AEATech\TransactionManager\NoBackoffStrategy;
+use AEATech\TransactionManager\RunResult;
 use AEATech\TransactionManager\TransactionInterface;
 use AEATech\TransactionManager\ErrorType;
 use AEATech\TransactionManager\ExecutionPlan;
@@ -21,17 +22,25 @@ use AEATech\TransactionManager\TransactionManager;
 use AEATech\TransactionManager\TxOptions;
 use AEATech\TransactionManager\Duration;
 use Mockery as m;
+use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Throwable;
 
-class TransactionManagerTest extends TransactionManagerTestCase
+#[CoversClass(TransactionManager::class)]
+#[CoversClass(UnknownCommitStateException::class)]
+#[CoversClass(Query::class)]
+#[CoversClass(RunResult::class)]
+class TransactionManagerTest extends TestCase
 {
+    use MockeryPHPUnitIntegration;
+
     private ExecutionPlanBuilderInterface $builder;
     private ConnectionInterface $conn;
     private ErrorClassifierInterface $classifier;
     private SleeperInterface $sleeper;
-    private RetryPolicy $defaultRetryPolicy;
     private TransactionManager $tm;
 
     protected function setUp(): void
@@ -42,13 +51,13 @@ class TransactionManagerTest extends TransactionManagerTestCase
         $this->conn = m::mock(ConnectionInterface::class);
         $this->classifier = m::mock(ErrorClassifierInterface::class);
         $this->sleeper = m::mock(SleeperInterface::class);
-        $this->defaultRetryPolicy = RetryPolicy::noRetry();
+        $defaultRetryPolicy = RetryPolicy::noRetry();
 
         $this->tm = new TransactionManager(
             $this->builder,
             $this->conn,
             $this->classifier,
-            $this->defaultRetryPolicy,
+            $defaultRetryPolicy,
             $this->sleeper
         );
     }

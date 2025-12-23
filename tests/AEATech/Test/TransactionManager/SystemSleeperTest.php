@@ -7,11 +7,17 @@ use AEATech\TransactionManager\Duration;
 use AEATech\TransactionManager\SystemSleeper;
 use AEATech\TransactionManager\TimeUnit;
 use Mockery as m;
+use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\TestCase;
 
-class SystemSleeperTest extends TransactionManagerTestCase
+#[CoversClass(SystemSleeper::class)]
+class SystemSleeperTest extends TestCase
 {
+    use MockeryPHPUnitIntegration;
+
     #[Test]
     #[DataProvider('nonPositiveDurationsProvider')]
     public function sleepDoesNothingForNonPositiveDuration(Duration $duration): void
