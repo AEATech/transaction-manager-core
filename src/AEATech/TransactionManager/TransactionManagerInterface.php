@@ -18,17 +18,21 @@ interface TransactionManagerInterface
      *
      * Flow:
      * 0. Pre-build: Before the DB transaction starts, collect a Query list via tx.build() (no I/O)
+     *    - EXCEPT for Transactions marked with #[DeferredBuild] attribute: build() is called later inside the DB transaction
      * 1. BEGIN TRANSACTION with a specified isolation level
      * 2. Execute all prepared Queries using executeQuery()
+     *    - For #[DeferredBuild] Transactions: build() is called here (inside the transaction) and then executed
      * 3. COMMIT with UnknownCommit detection
-     * 4. On error: rollback and retry if transient error (retry doesn't rebuild Queries)
+     * 4. On error: rollback and retry if transient error
+     *    - Normally, retry doesn't rebuild Queries (a pre-built result is reused)
+     *    - For #[DeferredBuild] Transactions: build() is called AGAIN on every retry
      *
      * #### Contracts and Guarantees
      * - `run($txs, $opt)`:
      *   - Preconditions:
      *     - `retries ≥ 0`.
      *     - If `$txs` is `iterable<Transaction>`: each `Transaction` must be stateless/pure
-     *       (repeated `build()` calls are deterministic).
+     *       (repeated `build()` calls are deterministic), UNLESS marked with #[DeferredBuild].
      *   - Postconditions (success):
      *     - For a single `Transaction`: returns `RunResult(affected)` from the single `execute`.
      *     - For `iterable<Transaction>`: returns `RunResult(totalAffected)` - sum of `affected` across all elements.
