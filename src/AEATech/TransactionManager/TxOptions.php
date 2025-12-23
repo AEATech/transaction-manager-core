@@ -23,4 +23,24 @@ class TxOptions
         public readonly ?RetryPolicy $retryPolicy = null,
     ) {
     }
+
+    public static function readUncommitted(?RetryPolicy $retryPolicy = null): self
+    {
+        return new self(IsolationLevel::ReadUncommitted, $retryPolicy);
+    }
+
+    public static function readCommitted(?RetryPolicy $retryPolicy = null): self
+    {
+        return new self(IsolationLevel::ReadCommitted, $retryPolicy);
+    }
+
+    public static function repeatableRead(?RetryPolicy $retryPolicy = null): self
+    {
+        return new self(IsolationLevel::RepeatableRead, $retryPolicy);
+    }
+
+    public static function serializable(?RetryPolicy $retryPolicy = null): self
+    {
+        return new self(IsolationLevel::Serializable, $retryPolicy);
+    }
 }
