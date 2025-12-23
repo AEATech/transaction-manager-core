@@ -44,7 +44,7 @@ idempotency rules, error semantics, and connection requirements, see:
 # Installation
 
 ```bash
-composer require aea-tech/transaction-manager-core
+composer require aeatech/transaction-manager-core
 ```
 
 # Quick Example
