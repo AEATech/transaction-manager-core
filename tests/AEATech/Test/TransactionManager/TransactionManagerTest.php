@@ -7,7 +7,6 @@ use AEATech\TransactionManager\BackoffStrategyInterface;
 use AEATech\TransactionManager\ConnectionInterface;
 use AEATech\TransactionManager\ErrorClassifierInterface;
 use AEATech\TransactionManager\Attribute\DeferredBuild;
-use AEATech\TransactionManager\NoBackoffStrategy;
 use AEATech\TransactionManager\RunResult;
 use AEATech\TransactionManager\TransactionInterface;
 use AEATech\TransactionManager\ErrorType;
@@ -37,29 +36,37 @@ class TransactionManagerTest extends TestCase
 {
     use MockeryPHPUnitIntegration;
 
-    private ExecutionPlanBuilderInterface $builder;
-    private ConnectionInterface $conn;
-    private ErrorClassifierInterface $classifier;
+    private ExecutionPlanBuilderInterface $executionPlanBuilder;
+    private ConnectionInterface $connection;
+    private ErrorClassifierInterface $errorClassifier;
     private SleeperInterface $sleeper;
     private TransactionManager $tm;
+    private TransactionInterface $tx;
+    private Query $defaultQuery;
+    private TxOptions $defaultTxOptions;
+    private BackoffStrategyInterface $defaultBackoff;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->builder = m::mock(ExecutionPlanBuilderInterface::class);
-        $this->conn = m::mock(ConnectionInterface::class);
-        $this->classifier = m::mock(ErrorClassifierInterface::class);
+        $this->executionPlanBuilder = m::mock(ExecutionPlanBuilderInterface::class);
+        $this->connection = m::mock(ConnectionInterface::class);
+        $this->errorClassifier = m::mock(ErrorClassifierInterface::class);
         $this->sleeper = m::mock(SleeperInterface::class);
         $defaultRetryPolicy = RetryPolicy::noRetry();
 
         $this->tm = new TransactionManager(
-            $this->builder,
-            $this->conn,
-            $this->classifier,
+            $this->executionPlanBuilder,
+            $this->connection,
+            $this->errorClassifier,
             $defaultRetryPolicy,
             $this->sleeper
         );
+        $this->tx = m::mock(TransactionInterface::class);
+        $this->defaultQuery = new Query('default');
+        $this->defaultTxOptions = new TxOptions();
+        $this->defaultBackoff = m::mock(BackoffStrategyInterface::class);
     }
 
     /**
@@ -72,24 +79,37 @@ class TransactionManagerTest extends TestCase
     {
         $q1 = new Query('INSERT ...', ['a' => 1], ['a' => 'int']);
         $q2 = new Query('UPDATE ...', ['id' => 5], ['id' => 'int']);
+
         $plan = new ExecutionPlan(isIdempotent: true, steps: [$q1, $q2]);
+
+        $tr1 = m::mock(TransactionInterface::class);
+        $tr2 = m::mock(TransactionInterface::class);
+
+        $txs = [
+            $tr1,
+            $tr2,
+        ];
+
+        $this->executionPlanBuilder->shouldReceive('build')
+            ->once()
+            ->with($txs)
+            ->andReturn($plan);
 
         $opt = new TxOptions(IsolationLevel::RepeatableRead);
 
-        $this->builder->shouldReceive('build')->once()->andReturn($plan);
-
         $this->mockBeginTransactionWithOptions($opt);
-        $this->conn->shouldReceive('executeQuery')->once()->with($q1)->andReturn(1);
-        $this->conn->shouldReceive('executeQuery')->once()->with($q2)->andReturn(3);
-        $this->conn->shouldReceive('commit')->once();
+
+        $this->mockExecuteQuery($q1, 1);
+        $this->mockExecuteQuery($q2, 3);
+
+        $this->mockCommit();
 
         // No retries, so no sleeper/backoff, no rollback
-        $this->conn->shouldNotReceive('rollBack');
+        $this->connection->shouldNotReceive('rollBack');
         $this->sleeper->shouldNotReceive('sleep');
-        $this->classifier->shouldNotReceive('classify');
+        $this->errorClassifier->shouldNotReceive('classify');
 
-
-        $res = $this->tm->run([$this, $this], $opt); // txs ignored by builder mock
+        $res = $this->tm->run($txs, $opt);
 
         self::assertSame(4, $res->affectedRows);
     }
@@ -103,24 +123,18 @@ class TransactionManagerTest extends TestCase
     #[Test]
     public function executeErrorWithoutRetryPolicyPropagates(): void
     {
-        $q1 = new Query('DO');
-        $plan = new ExecutionPlan(true, [$q1]);
-
-        $opt = new TxOptions();
-
-        $this->builder->shouldReceive('build')->once()->andReturn($plan);
-
-        $this->mockBeginTransactionWithOptions($opt);
+        $this->mockExecutionPlanBuilder($this->defaultQuery);
+        $this->mockBeginTransactionWithOptions($this->defaultTxOptions);
 
         $err = new RuntimeException('boom');
-        $this->expectExecThrowsAndRollbackThenClassify($err, ErrorType::Transient, $q1);
+
+        $this->expectExecThrowsAndRollbackThenClassify($this->defaultQuery, $err, ErrorType::Transient);
+
         $this->sleeper->shouldNotReceive('sleep');
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('boom');
+        $this->expectExceptionObject($err);
 
-
-        $this->tm->run([$this], $opt);
+        $this->tm->run($this->tx);
     }
 
     /**
@@ -131,23 +145,18 @@ class TransactionManagerTest extends TestCase
     #[Test]
     public function fatalErrorPropagatesImmediately(): void
     {
-        $q1 = new Query('X');
-        $plan = new ExecutionPlan(true, [$q1]);
-
-        $opt = new TxOptions();
-
-        $this->builder->shouldReceive('build')->once()->andReturn($plan);
-
-        $this->mockBeginTransactionWithOptions($opt);
+        $this->mockExecutionPlanBuilder($this->defaultQuery);
+        $this->mockBeginTransactionWithOptions($this->defaultTxOptions);
 
         $err = new RuntimeException('fatal');
-        $this->expectExecThrowsAndRollbackThenClassify($err, ErrorType::Fatal);
+
+        $this->expectExecThrowsAndRollbackThenClassify($this->defaultQuery, $err, ErrorType::Fatal);
+
         $this->sleeper->shouldNotReceive('sleep');
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('fatal');
+        $this->expectExceptionObject($err);
 
-        $this->tm->run([$this], $opt);
+        $this->tm->run($this->tx);
     }
 
     /**
@@ -159,33 +168,25 @@ class TransactionManagerTest extends TestCase
     #[Test]
     public function transientErrorWithPolicyRetriesAndSucceeds(): void
     {
-        $backoff = m::mock(BackoffStrategyInterface::class);
+        $opt = new TxOptions(IsolationLevel::ReadCommitted, new RetryPolicy(2, $this->defaultBackoff));
 
-        $q = new Query('UPDATE');
-        $plan = new ExecutionPlan(true, [$q]);
-        $this->builder->shouldReceive('build')->once()->andReturn($plan);
-
-        $opt = new TxOptions(IsolationLevel::ReadCommitted, new RetryPolicy(2, $backoff));
+        $this->mockExecutionPlanBuilder($this->defaultQuery);
 
         // First attempt
         $this->mockBeginTransactionWithOptions($opt, times: 2);
 
         $err = new RuntimeException('transient');
-        $this->expectExecThrowsAndRollbackThenClassify($err, ErrorType::Transient);
+        $this->expectExecThrowsAndRollbackThenClassify($this->defaultQuery, $err, ErrorType::Transient);
 
         // Backoff for attempt 0
-        $backoff->shouldReceive('delay')->once()->with(0)->andReturn(Duration::milliseconds(5));
-        $this->sleeper->shouldReceive('sleep')
-            ->once()
-            ->with(m::on(static function (Duration $d) {
-                return $d->toMicroseconds() === 5_000;
-            }));
+        $this->mockGetDelayAndSleep(delayMs: 5);
 
         // Second attempt succeeds
-        $this->conn->shouldReceive('executeQuery')->once()->andReturn(2);
-        $this->conn->shouldReceive('commit')->once();
+        $this->mockExecuteQuery($this->defaultQuery, 2);
 
-        $res = $this->tm->run([$this], $opt);
+        $this->mockCommit();
+
+        $res = $this->tm->run($this->tx, $opt);
 
         self::assertSame(2, $res->affectedRows);
     }
@@ -198,28 +199,26 @@ class TransactionManagerTest extends TestCase
     #[Test]
     public function connectionErrorClosesBeforeRetry(): void
     {
-        $backoff = m::mock(BackoffStrategyInterface::class);
+        $this->mockExecutionPlanBuilder($this->defaultQuery);
 
-        $q = new Query('SELECT 1');
-        $plan = new ExecutionPlan(true, [$q]);
-        $this->builder->shouldReceive('build')->once()->andReturn($plan);
-
-        $opt = new TxOptions(IsolationLevel::ReadCommitted, new RetryPolicy(1, $backoff));
+        $opt = new TxOptions(IsolationLevel::ReadCommitted, new RetryPolicy(1, $this->defaultBackoff));
 
         // Attempt 0 fails with a connection error
         $this->mockBeginTransactionWithOptions($opt, 2);
+
         $err = new RuntimeException('conn');
-        $this->expectExecThrowsAndRollbackThenClassify($err, ErrorType::Connection);
-        $this->conn->shouldReceive('close')->once();
-        $backoff->shouldReceive('delay')->once()->with(0)->andReturn(Duration::milliseconds(1));
-        $this->sleeper->shouldReceive('sleep')->once();
+        $this->expectExecThrowsAndRollbackThenClassify($this->defaultQuery, $err, ErrorType::Connection);
+
+        $this->mockConnectionClose();
+
+        $this->mockGetDelayAndSleep(delayMs: 1);
 
         // Attempt 1 OK
-        $this->conn->shouldReceive('executeQuery')->once()->andReturn(1);
-        $this->conn->shouldReceive('commit')->once();
+        $this->mockExecuteQuery($this->defaultQuery, 1);
 
+        $this->mockCommit();
 
-        $res = $this->tm->run([$this], $opt);
+        $res = $this->tm->run($this->tx, $opt);
 
         self::assertSame(1, $res->affectedRows);
     }
@@ -232,37 +231,30 @@ class TransactionManagerTest extends TestCase
     #[Test]
     public function exceedsMaxRetriesThrowsLastError(): void
     {
-        $backoff = m::mock(BackoffStrategyInterface::class);
+        $this->mockExecutionPlanBuilder($this->defaultQuery);
 
-        $opt = new TxOptions(IsolationLevel::ReadCommitted, new RetryPolicy(2, $backoff));
-
-        $q = new Query('Q');
-        $plan = new ExecutionPlan(true, [$q]);
-        $this->builder->shouldReceive('build')->once()->andReturn($plan);
+        $opt = new TxOptions(IsolationLevel::ReadCommitted, new RetryPolicy(2, $this->defaultBackoff));
 
         $this->mockBeginTransactionWithOptions($opt, 3);
 
         // Three attempts all fail with transient; policy allows 2 retries (maxRetries=2)
         // Attempt 0
         $err0 = new RuntimeException('t0');
-        $this->expectExecThrowsAndRollbackThenClassify($err0, ErrorType::Transient);
-        $backoff->shouldReceive('delay')->once()->with(0)->andReturn(Duration::milliseconds(1));
-        $this->sleeper->shouldReceive('sleep')->once();
+        $this->expectExecThrowsAndRollbackThenClassify($this->defaultQuery, $err0, ErrorType::Transient);
+        $this->mockGetDelayAndSleep(delayMs: 1);
 
         // Attempt 1
         $err1 = new RuntimeException('t1');
-        $this->expectExecThrowsAndRollbackThenClassify($err1, ErrorType::Transient);
-        $backoff->shouldReceive('delay')->once()->with(1)->andReturn(Duration::milliseconds(2));
-        $this->sleeper->shouldReceive('sleep')->once();
+        $this->expectExecThrowsAndRollbackThenClassify($this->defaultQuery, $err1, ErrorType::Transient);
+        $this->mockGetDelayAndSleep(delayMs: 2, attempt: 1);
 
         // Attempt 2 (last allowed) fails and must be thrown (no further sleep)
         $err2 = new RuntimeException('t2');
-        $this->expectExecThrowsAndRollbackThenClassify($err2, ErrorType::Transient);
+        $this->expectExecThrowsAndRollbackThenClassify($this->defaultQuery, $err2, ErrorType::Transient);
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('t2');
+        $this->expectExceptionObject($err2);
 
-        $this->tm->run([$this], $opt);
+        $this->tm->run($this->tx, $opt);
     }
 
     /**
@@ -273,25 +265,22 @@ class TransactionManagerTest extends TestCase
     #[Test]
     public function commitErrorOnNonIdempotentThrowsUnknownState(): void
     {
-        $q = new Query('ins');
-        $plan = new ExecutionPlan(false, [$q]); // non-idempotent
-        $this->builder->shouldReceive('build')->once()->andReturn($plan);
+        $this->mockExecutionPlanBuilder($this->defaultQuery, isIdempotent: false);
+        $this->mockBeginTransactionWithOptions($this->defaultTxOptions);
 
-        $opt = new TxOptions();
+        $this->mockExecuteQuery($this->defaultQuery, 1);
 
-        $this->mockBeginTransactionWithOptions($opt);
-
-        $this->conn->shouldReceive('executeQuery')->once()->andReturn(1);
         $err = new RuntimeException('commit failed');
-        $this->conn->shouldReceive('commit')->once()->andThrow($err);
-        $this->conn->shouldReceive('rollBack')->once();
+        $this->connection->shouldReceive('commit')->once()->andThrow($err);
+        $this->mockRollback();
 
         // No classification should be needed because UnknownCommitState is thrown before classifying
-        $this->classifier->shouldNotReceive('classify');
+        $this->errorClassifier->shouldNotReceive('classify');
         $this->sleeper->shouldNotReceive('sleep');
 
         $this->expectException(UnknownCommitStateException::class);
-        $this->tm->run([$this], $opt);
+
+        $this->tm->run($this->tx);
     }
 
     /**
@@ -302,29 +291,29 @@ class TransactionManagerTest extends TestCase
     #[Test]
     public function commitErrorOnIdempotentRetriesAndSucceeds(): void
     {
-        $backoff = m::mock(BackoffStrategyInterface::class);
+        $this->mockExecutionPlanBuilder($this->defaultQuery);
 
-        $q = new Query('work');
-        $plan = new ExecutionPlan(true, [$q]); // idempotent
-        $this->builder->shouldReceive('build')->once()->andReturn($plan);
-
-        $opt = new TxOptions(IsolationLevel::ReadCommitted, new RetryPolicy(1, $backoff));
+        $opt = new TxOptions(IsolationLevel::ReadCommitted, new RetryPolicy(1, $this->defaultBackoff));
 
         $this->mockBeginTransactionWithOptions($opt, 2);
 
         // Attempt 0: executes fine, commit fails
-        $this->conn->shouldReceive('executeQuery')->once()->andReturn(1);
+        $this->mockExecuteQuery($this->defaultQuery, rowsAffected: 1, times: 2);
+
         $cErr = new RuntimeException('commit transient');
-        $this->expectCommitThrowsRollbackThenClassify($cErr);
-        $backoff->shouldReceive('delay')->once()->with(0)->andReturn(Duration::milliseconds(1));
-        $this->sleeper->shouldReceive('sleep')->once();
+
+        $this->connection->shouldReceive('commit')->once()->andThrow($cErr);
+
+        $this->mockRollback();
+
+        $this->mockClassifyError($cErr, ErrorType::Transient);
+
+        $this->mockGetDelayAndSleep(delayMs: 1);
 
         // Attempt 1: succeeds
-        $this->conn->shouldReceive('executeQuery')->once()->andReturn(1);
-        $this->conn->shouldReceive('commit')->once();
+        $this->mockCommit();
 
-
-        $res = $this->tm->run([$this], $opt);
+        $res = $this->tm->run($this->tx, $opt);
 
         self::assertSame(1, $res->affectedRows);
     }
@@ -340,40 +329,37 @@ class TransactionManagerTest extends TestCase
     #[Test]
     public function beginReconnectOnFirstAttemptOnly(): void
     {
-        $backoff = m::mock(BackoffStrategyInterface::class);
+        $this->mockExecutionPlanBuilder($this->defaultQuery);
 
-        $q = new Query('Q');
-        $plan = new ExecutionPlan(true, [$q]);
-        $this->builder->shouldReceive('build')->once()->andReturn($plan);
-
-        $opt = new TxOptions(IsolationLevel::ReadCommitted, new RetryPolicy(1, $backoff));
+        $opt = new TxOptions(IsolationLevel::ReadCommitted, new RetryPolicy(1, $this->defaultBackoff));
 
         // First attempt: begin throws immediately, should close and begin again,
         // then execute throws to force a retry path
         $beginErr0 = new RuntimeException('gone away');
-        $this->conn->shouldReceive('beginTransactionWithOptions')
-            ->once()
-            ->with($opt)
-            ->andThrow($beginErr0);
-        $this->conn->shouldReceive('close')->once();
-        $this->conn->shouldReceive('beginTransactionWithOptions')->once()->with($opt); // retry begins
+
+        $this->mockBeginTransactionWithOptionsWithErr($opt, $beginErr0);
+
+        $this->mockConnectionClose();
+
+        $this->mockBeginTransactionWithOptions($opt); // retry begins
 
         $execErr = new RuntimeException('deadlock');
-        $this->expectExecThrowsAndRollbackThenClassify($execErr, ErrorType::Transient);
-        $backoff->shouldReceive('delay')->once()->with(0)->andReturn(Duration::milliseconds(1));
-        $this->sleeper->shouldReceive('sleep')->once();
+        $this->expectExecThrowsAndRollbackThenClassify($this->defaultQuery, $execErr, ErrorType::Transient);
+
+        $this->mockGetDelayAndSleep(delayMs: 1);
 
         // Second attempt: begin throws again, but now allowReconnect=false so it should propagate without close()
         $beginErr1 = new RuntimeException('begin fail attempt1');
-        $this->conn->shouldReceive('beginTransactionWithOptions')->once()->with($opt)->andThrow($beginErr1);
 
-        $this->conn->shouldReceive('rollBack')->once();
-        $this->classifier->shouldReceive('classify')->once()->with($beginErr1)->andReturn(ErrorType::Fatal);
+        $this->mockBeginTransactionWithOptionsWithErr($opt, $beginErr1);
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('begin fail attempt1');
+        $this->mockRollback();
 
-        $this->tm->run([$this], $opt);
+        $this->mockClassifyError($beginErr1, ErrorType::Fatal);
+
+        $this->expectExceptionObject($beginErr1);
+
+        $this->tm->run($this->tx, $opt);
     }
 
     /**
@@ -384,24 +370,24 @@ class TransactionManagerTest extends TestCase
     #[Test]
     public function safeRollbackSwallowsErrors(): void
     {
-        $q = new Query('BROKEN');
-        $plan = new ExecutionPlan(true, [$q]);
-        $this->builder->shouldReceive('build')->once()->andReturn($plan);
+        $this->mockExecutionPlanBuilder($this->defaultQuery);
 
-        $opt = new TxOptions();
-        $this->mockBeginTransactionWithOptions($opt);
+        $this->mockBeginTransactionWithOptions($this->defaultTxOptions);
 
-        $execErr = new RuntimeException('exec');
-        $this->conn->shouldReceive('executeQuery')->once()->andThrow($execErr);
+        $err = new RuntimeException('exec');
+
+        $this->mockExecuteQueryWithErr($this->defaultQuery, $err);
+
         // rollBack itself throws, but TransactionManager must swallow it
-        $this->conn->shouldReceive('rollBack')->once()->andThrow(new RuntimeException('rb fail'));
+        $this->connection->shouldReceive('rollBack')
+            ->once()
+            ->andThrow(new RuntimeException('rb fail'));
 
-        $this->classifier->shouldReceive('classify')->once()->with($execErr)->andReturn(ErrorType::Fatal);
+        $this->mockClassifyError($err, ErrorType::Fatal);
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('exec');
+        $this->expectExceptionObject($err);
 
-        $this->tm->run([$this], $opt);
+        $this->tm->run($this->tx);
     }
 
     /**
@@ -412,37 +398,31 @@ class TransactionManagerTest extends TestCase
     #[Test]
     public function usesDefaultRetryPolicyFromConstructor(): void
     {
-        $backoff = m::mock(BackoffStrategyInterface::class);
-        $defaultPolicy = new RetryPolicy(1, $backoff);
+        $this->mockExecutionPlanBuilder($this->defaultQuery);
 
-        // Re-create TM with a specific default policy
-        $this->tm = new TransactionManager(
-            $this->builder,
-            $this->conn,
-            $this->classifier,
+        // First attempt fails, second succeeds (because defaultPolicy has maxRetries=1)
+        $this->mockBeginTransactionWithOptions($this->defaultTxOptions, 2);
+
+        $err = new RuntimeException('transient');
+        $this->expectExecThrowsAndRollbackThenClassify($this->defaultQuery, $err, ErrorType::Transient);
+
+        $this->mockGetDelayAndSleep(delayMs: 1);
+
+        $this->mockExecuteQuery($this->defaultQuery, 1);
+        $this->mockCommit();
+
+        $defaultPolicy = new RetryPolicy(maxRetries: 1, backoffStrategy: $this->defaultBackoff);
+
+        $tm = new TransactionManager(
+            $this->executionPlanBuilder,
+            $this->connection,
+            $this->errorClassifier,
             $defaultPolicy,
             $this->sleeper
         );
 
-        $q = new Query('Q');
-        $plan = new ExecutionPlan(true, [$q]);
-        $this->builder->shouldReceive('build')->once()->andReturn($plan);
+        $res = $tm->run($this->tx);
 
-        $opt = new TxOptions(); // No retry policy in options
-
-        // First attempt fails, second succeeds (because defaultPolicy has maxRetries=1)
-        $this->mockBeginTransactionWithOptions($opt, 2);
-
-        $err = new RuntimeException('transient');
-        $this->expectExecThrowsAndRollbackThenClassify($err, ErrorType::Transient);
-
-        $backoff->shouldReceive('delay')->once()->with(0)->andReturn(Duration::milliseconds(1));
-        $this->sleeper->shouldReceive('sleep')->once();
-
-        $this->conn->shouldReceive('executeQuery')->once()->andReturn(1);
-        $this->conn->shouldReceive('commit')->once();
-
-        $res = $this->tm->run([$this], $opt);
         self::assertSame(1, $res->affectedRows);
     }
 
@@ -454,37 +434,33 @@ class TransactionManagerTest extends TestCase
     #[Test]
     public function txOptionsOverrideDefaultRetryPolicy(): void
     {
-        // Constructor policy: no retries
-        $this->tm = new TransactionManager(
-            $this->builder,
-            $this->conn,
-            $this->classifier,
-            RetryPolicy::noRetry(),
-            $this->sleeper
-        );
-
-        $backoff = m::mock(BackoffStrategyInterface::class);
-        $customPolicy = new RetryPolicy(1, $backoff);
-
-        $q = new Query('Q');
-        $plan = new ExecutionPlan(true, [$q]);
-        $this->builder->shouldReceive('build')->once()->andReturn($plan);
+        $this->mockExecutionPlanBuilder($this->defaultQuery);
 
         // Options policy: 1 retry
-        $opt = new TxOptions(retryPolicy: $customPolicy);
+        $opt = new TxOptions(retryPolicy: new RetryPolicy(1, $this->defaultBackoff));
 
         $this->mockBeginTransactionWithOptions($opt, 2);
 
         $err = new RuntimeException('transient');
-        $this->expectExecThrowsAndRollbackThenClassify($err, ErrorType::Transient);
+        $this->expectExecThrowsAndRollbackThenClassify($this->defaultQuery, $err, ErrorType::Transient);
 
-        $backoff->shouldReceive('delay')->once()->with(0)->andReturn(Duration::milliseconds(1));
-        $this->sleeper->shouldReceive('sleep')->once();
+        $this->mockGetDelayAndSleep(delayMs: 1);
 
-        $this->conn->shouldReceive('executeQuery')->once()->andReturn(1);
-        $this->conn->shouldReceive('commit')->once();
+        $this->mockExecuteQuery($this->defaultQuery, 1);
 
-        $res = $this->tm->run([$this], $opt);
+        $this->mockCommit();
+
+        // Constructor policy: no retries
+        $tm = new TransactionManager(
+            $this->executionPlanBuilder,
+            $this->connection,
+            $this->errorClassifier,
+            RetryPolicy::noRetry(),
+            $this->sleeper
+        );
+
+        $res = $tm->run($this->tx, $opt);
+
         self::assertSame(1, $res->affectedRows);
     }
 
@@ -497,46 +473,38 @@ class TransactionManagerTest extends TestCase
     #[Test]
     public function verifiesMaxRetriesSemantic(): void
     {
-        $backoff = m::mock(BackoffStrategyInterface::class);
-        $policy = new RetryPolicy(2, $backoff); // 2 additional retries -> 3 attempts total
-
-        $this->tm = new TransactionManager(
-            $this->builder,
-            $this->conn,
-            $this->classifier,
-            $policy,
-            $this->sleeper
-        );
-
-        $q = new Query('Q');
-        $plan = new ExecutionPlan(true, [$q]);
-        $this->builder->shouldReceive('build')->once()->andReturn($plan);
-
-        $opt = new TxOptions();
+        $this->mockExecutionPlanBuilder($this->defaultQuery);
 
         // 3 attempts total
-        $this->mockBeginTransactionWithOptions($opt, 3);
+        $this->mockBeginTransactionWithOptions($this->defaultTxOptions, 3);
 
         // Attempt 0 fails
         $err0 = new RuntimeException('fail0');
-        $this->expectExecThrowsAndRollbackThenClassify($err0, ErrorType::Transient);
-        $backoff->shouldReceive('delay')->once()->with(0)->andReturn(Duration::milliseconds(1));
-        $this->sleeper->shouldReceive('sleep')->once();
+        $this->expectExecThrowsAndRollbackThenClassify($this->defaultQuery, $err0, ErrorType::Transient);
+
+        $this->mockGetDelayAndSleep(delayMs: 1);
 
         // Attempt 1 fails
         $err1 = new RuntimeException('fail1');
-        $this->expectExecThrowsAndRollbackThenClassify($err1, ErrorType::Transient);
-        $backoff->shouldReceive('delay')->once()->with(1)->andReturn(Duration::milliseconds(1));
-        $this->sleeper->shouldReceive('sleep')->once();
+        $this->expectExecThrowsAndRollbackThenClassify($this->defaultQuery, $err1, ErrorType::Transient);
+
+        $this->mockGetDelayAndSleep(delayMs: 2, attempt: 1);
 
         // Attempt 2 fails and propagates (exhausted)
         $err2 = new RuntimeException('fail2');
-        $this->expectExecThrowsAndRollbackThenClassify($err2, ErrorType::Transient);
+        $this->expectExecThrowsAndRollbackThenClassify($this->defaultQuery, $err2, ErrorType::Transient);
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('fail2');
+        $this->expectExceptionObject($err2);
 
-        $this->tm->run([$this], $opt);
+        $tm = new TransactionManager(
+            $this->executionPlanBuilder,
+            $this->connection,
+            $this->errorClassifier,
+            new RetryPolicy(2, $this->defaultBackoff), // 2 additional retries -> 3 attempts total
+            $this->sleeper
+        );
+
+        $tm->run($this->tx);
     }
 
     /**
@@ -545,64 +513,152 @@ class TransactionManagerTest extends TestCase
     #[Test]
     public function deferredBuildCalledInsideTransactionOnEveryRetry(): void
     {
-        $q1 = new Query('INSERT 1');
-        $q2 = new Query('INSERT 2');
+        $query1 = new Query('INSERT 1');
+        $query2 = new Query('INSERT 2');
 
-        $tx = new #[DeferredBuild] class($q1, $q2) implements TransactionInterface {
+        $tx = new #[DeferredBuild] class($query1, $query2) implements TransactionInterface {
             public int $calls = 0;
-            public function __construct(private Query $q1, private Query $q2) {}
-            public function build(): Query {
+            public function __construct(
+                private readonly Query $q1,
+                private readonly Query $q2
+            ) {
+            }
+            public function build(): Query
+            {
                 $this->calls++;
                 return $this->calls === 1 ? $this->q1 : $this->q2;
             }
-            public function isIdempotent(): bool { return true; }
+            public function isIdempotent(): bool
+            {
+                return true;
+            }
         };
 
-        $this->builder->shouldReceive('build')->once()->andReturn(
-            new ExecutionPlan(true, [$tx])
-        );
+        $this->executionPlanBuilder->shouldReceive('build')
+            ->once()
+            ->with($tx)
+            ->andReturn(
+                new ExecutionPlan(true, [$tx])
+            );
+
+        $opt = new TxOptions(retryPolicy: new RetryPolicy(1, $this->defaultBackoff));
 
         // First attempt fails during execution
-        $this->conn->shouldReceive('beginTransactionWithOptions')->twice();
-        $this->conn->shouldReceive('executeQuery')->with($q1)->once()->andThrow(new RuntimeException('transient'));
-        $this->classifier->shouldReceive('classify')->once()->andReturn(ErrorType::Transient);
-        $this->sleeper->shouldReceive('sleep')->once();
+        $this->mockBeginTransactionWithOptions($opt, times: 2);
+
+        $err = new RuntimeException('transient');
+
+        $this->expectExecThrowsAndRollbackThenClassify($query1, $err, ErrorType::Transient);
+
+        $this->mockGetDelayAndSleep(delayMs: 1);
 
         // Second attempt succeeds
-        $this->conn->shouldReceive('executeQuery')->with($q2)->once()->andReturn(1);
-        $this->conn->shouldReceive('commit')->once();
-        $this->conn->shouldReceive('rollBack')->once(); // for the first attempt
+        $this->mockExecuteQuery($query2, 1);
 
-        $opt = new TxOptions(retryPolicy: new RetryPolicy(1, new NoBackoffStrategy()));
+        $this->mockCommit();
+
         $result = $this->tm->run($tx, $opt);
 
         self::assertSame(1, $result->affectedRows);
         self::assertSame(2, $tx->calls, 'build() should be called on every attempt');
     }
 
-    private function mockBeginTransactionWithOptions(TxOptions $options, int $times = 1): void
+    private function mockExecutionPlanBuilder(Query $query, bool $isIdempotent = true): void
     {
-        $this->conn->shouldReceive('beginTransactionWithOptions')
+        $steps = [
+            $query,
+        ];
+
+        $plan = new ExecutionPlan($isIdempotent, $steps);
+
+        $this->executionPlanBuilder->shouldReceive('build')
+            ->once()
+            ->with($this->tx)
+            ->andReturn($plan);
+    }
+
+    private function mockExecuteQuery(Query $q, int $rowsAffected, int $times = 1): void
+    {
+        $this->connection->shouldReceive('executeQuery')
             ->times($times)
-            ->with($options);
+            ->with($q)
+            ->andReturn($rowsAffected);
     }
 
-    private function expectExecThrowsAndRollbackThenClassify(Throwable $err, ErrorType $type, ?Query $q = null): void
+    private function mockExecuteQueryWithErr(Query $q, Throwable $err): void
     {
-        $exp = $this->conn->shouldReceive('executeQuery')->once();
-        if ($q !== null) {
-            $exp->with($q);
-        }
-        $exp->andThrow($err);
-
-        $this->conn->shouldReceive('rollBack')->once();
-        $this->classifier->shouldReceive('classify')->once()->with($err)->andReturn($type);
+        $this->connection->shouldReceive('executeQuery')
+            ->once()
+            ->with($q)
+            ->andThrow($err);
     }
 
-    private function expectCommitThrowsRollbackThenClassify(Throwable $err): void
+    private function mockCommit(): void
     {
-        $this->conn->shouldReceive('commit')->once()->andThrow($err);
-        $this->conn->shouldReceive('rollBack')->once();
-        $this->classifier->shouldReceive('classify')->once()->with($err)->andReturn(ErrorType::Transient);
+        $this->connection->shouldReceive('commit')->once();
+    }
+
+    private function mockGetDelayAndSleep(int $delayMs, int $attempt = 0): void
+    {
+        // Backoff for attempt 0
+        $this->defaultBackoff->shouldReceive('delay')
+            ->once()
+            ->with($attempt)
+            ->andReturn(Duration::milliseconds($delayMs));
+
+        $this->sleeper->shouldReceive('sleep')
+            ->once()
+            ->with(m::on(static function (Duration $d) use ($delayMs) {
+                return $d->toMicroseconds() === $delayMs * 1000;
+            }));
+    }
+
+    private function mockRollback(): void
+    {
+        $this->connection->shouldReceive('rollBack')->once();
+    }
+
+    private function mockConnectionClose(): void
+    {
+        $this->connection->shouldReceive('close')->once();
+    }
+
+    private function mockClassifyError(Throwable $err, ErrorType $type): void
+    {
+        $this->errorClassifier->shouldReceive('classify')
+            ->once()
+            ->with($err)
+            ->andReturn($type);
+    }
+
+    private function mockBeginTransactionWithOptions(TxOptions $opt, int $times = 1): void
+    {
+        $this->connection->shouldReceive('beginTransactionWithOptions')
+            ->times($times)
+            ->with(m::on(static function (TxOptions $o) use ($opt): bool {
+                return $o->isolationLevel === $opt->isolationLevel && $o->retryPolicy === $opt->retryPolicy;
+            }));
+    }
+
+    private function mockBeginTransactionWithOptionsWithErr(TxOptions $opt, Throwable $err): void
+    {
+        $this->connection->shouldReceive('beginTransactionWithOptions')
+            ->once()
+            ->with(m::on(static function (TxOptions $o) use ($opt): bool {
+                return $o->isolationLevel === $opt->isolationLevel && $o->retryPolicy === $opt->retryPolicy;
+            }))
+            ->andThrow($err);
+    }
+
+    private function expectExecThrowsAndRollbackThenClassify(Query $q, Throwable $err, ErrorType $type): void
+    {
+        $this->connection->shouldReceive('executeQuery')
+            ->once()
+            ->with($q)
+            ->andThrow($err);
+
+        $this->mockRollback();
+
+        $this->mockClassifyError($err, $type);
     }
 }
