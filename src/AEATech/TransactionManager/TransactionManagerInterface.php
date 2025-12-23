@@ -42,8 +42,7 @@ interface TransactionManagerInterface
      *
      * @throws UnknownCommitStateException
      * @throws LogicException Thrown when the TransactionManager cannot safely take control over the database transaction
-     * — For example,
-     * - the underlying connection already has an active transaction
+     * — For example, the underlying connection already has an active transaction
      * (TransactionManager requires exclusive control over BEGIN/COMMIT/ROLLBACK);
      *
      * @throws Throwable
