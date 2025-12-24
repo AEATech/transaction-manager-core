@@ -1,0 +1,80 @@
+name: CI
+
+on:
+    push:
+        branches: [ "main" ]
+    pull_request:
+
+permissions:
+    contents: write
+
+jobs:
+    tests:
+        name: Tests (PHP ${{ matrix.php }})
+        runs-on: ubuntu-latest
+
+        strategy:
+            fail-fast: false
+            matrix:
+                php: [ "8.2", "8.3", "8.4" ]
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup PHP
+              uses: shivammathur/setup-php@v2
+              with:
+                  php-version: ${{ matrix.php }}
+                  tools: composer:v2
+                  coverage: ${{ matrix.php == '8.2' && 'xdebug' || 'none' }}
+
+            - name: Install dependencies
+              run: composer install --no-interaction --no-progress --prefer-dist
+
+            - name: Run PHPStan
+              run: vendor/bin/phpstan analyze -c phpstan.neon --error-format=github --memory-limit=1G --no-progress
+
+            - name: Run PHPUnit (no coverage)
+              if: matrix.php != '8.2'
+              run: |
+                  vendor/bin/phpunit
+
+            - name: Run PHPUnit (with coverage on 8.2)
+              if: matrix.php == '8.2'
+              run: |
+                  mkdir -p .build
+                  vendor/bin/phpunit \
+                    --coverage-clover .build/clover.xml
+
+            - name: Generate coverage badge (8.2)
+              if: matrix.php == '8.2'
+              uses: timkrase/phpunit-coverage-badge@v1
+              with:
+                  report_type: clover
+                  report_path: .build/clover.xml
+                  badge_path: .build/coverage_badge.svg
+
+            - name: Upload coverage artifacts (8.2)
+              if: matrix.php == '8.2'
+              uses: actions/upload-artifact@v4
+              with:
+                  name: coverage
+                  path: .build/coverage_badge.svg
+
+            # Commit badge/coverage ONLY to push to main (not to PR)
+            - name: Commit coverage artifacts to repo (push main only)
+              if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.php == '8.2'
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+
+                  git add .build/coverage_badge.svg
+                  
+                  if git diff --cached --quiet; then
+                    echo "No coverage changes to commit."
+                    exit 0
+                  fi
+
+                  git commit -m "chore(ci): update coverage badge"
+                  git push

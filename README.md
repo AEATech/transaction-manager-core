@@ -1,5 +1,7 @@
 # AEATech Transaction Manager (Core)
 
+![Code Coverage](.build/coverage_badge.svg)
+
 A lightweight, DB-agnostic transaction manager designed for high-load environments,
 with first-class support for:
 
