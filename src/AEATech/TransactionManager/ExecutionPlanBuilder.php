@@ -3,13 +3,16 @@ declare(strict_types=1);
 
 namespace AEATech\TransactionManager;
 
-use AEATech\TransactionManager\Attribute\DeferredBuild;
 use InvalidArgumentException;
-use ReflectionClass;
 use Throwable;
 
 class ExecutionPlanBuilder implements ExecutionPlanBuilderInterface
 {
+    public function __construct(
+        private readonly DeferredBuildResolverInterface $deferredBuildResolver = new ReflectionDeferredBuildResolver(),
+    ) {
+    }
+
     public function build(iterable|TransactionInterface $txs): ExecutionPlan
     {
         $isIdempotent = true;
@@ -17,12 +20,12 @@ class ExecutionPlanBuilder implements ExecutionPlanBuilderInterface
 
         if (is_iterable($txs)) {
             foreach ($txs as $tx) {
-                $steps[] = self::transactionToStep($tx);
+                $steps[] = $this->transactionToStep($tx);
                 $isIdempotent = $isIdempotent && $tx->isIdempotent();
             }
         } else {
             $steps = [
-                self::transactionToStep($txs),
+                $this->transactionToStep($txs),
             ];
 
             $isIdempotent = $txs->isIdempotent();
@@ -38,13 +41,8 @@ class ExecutionPlanBuilder implements ExecutionPlanBuilderInterface
     /**
      * @throws Throwable
      */
-    private static function transactionToStep(TransactionInterface $tx): TransactionInterface|Query
+    private function transactionToStep(TransactionInterface $tx): TransactionInterface|Query
     {
-        return self::isDeferredBuild($tx) ? $tx : $tx->build();
-    }
-
-    private static function isDeferredBuild(TransactionInterface $tx): bool
-    {
-        return [] !== (new ReflectionClass($tx))->getAttributes(DeferredBuild::class);
+        return $this->deferredBuildResolver->isDeferredBuild($tx) ? $tx : $tx->build();
     }
 }
