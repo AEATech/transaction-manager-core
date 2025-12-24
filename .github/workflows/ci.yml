@@ -49,7 +49,7 @@ jobs:
 
             - name: Generate coverage badge (8.2)
               if: matrix.php == '8.2'
-              uses: timkrase/phpunit-coverage-badge@v1
+              uses: timkrase/phpunit-coverage-badge@v1.2.1
               with:
                   report_type: clover
                   report_path: .build/clover.xml
