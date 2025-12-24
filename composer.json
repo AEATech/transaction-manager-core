@@ -1,7 +1,7 @@
 {
     "name": "aeatech/transaction-manager-core",
     "description": "Transaction manager core",
-    "keywords": ["transaction-manager", "transaction", "database", "MySQL", "PostgreSQL"],
+    "keywords": ["aeatech", "transaction-manager", "transaction", "database", "MySQL", "PostgreSQL"],
     "license": "MIT",
     "config": {
         "sort-packages": true
