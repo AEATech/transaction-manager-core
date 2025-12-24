@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 defined('ROOT_PATH') || define('ROOT_PATH', dirname(__DIR__) . '/');
 
 date_default_timezone_set('UTC');
