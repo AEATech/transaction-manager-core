@@ -19,7 +19,7 @@ class GenericErrorClassifierTest extends TestCase
 {
     use MockeryPHPUnitIntegration;
 
-    private DatabaseErrorHeuristicsInterface $heuristics;
+    private DatabaseErrorHeuristicsInterface&m\MockInterface $heuristics;
     private GenericErrorClassifier $classifier;
 
     protected function setUp(): void

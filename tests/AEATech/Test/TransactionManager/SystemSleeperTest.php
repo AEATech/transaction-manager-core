@@ -19,7 +19,7 @@ class SystemSleeperTest extends TestCase
     use MockeryPHPUnitIntegration;
 
     #[Test]
-    #[DataProvider('nonPositiveDurationsProvider')]
+    #[DataProvider('nonPositiveDurationsDataProvider')]
     public function sleepDoesNothingForNonPositiveDuration(Duration $duration): void
     {
         $sleeper = self::buildSleepMock();
@@ -29,7 +29,7 @@ class SystemSleeperTest extends TestCase
         $sleeper->sleep($duration);
     }
 
-    public static function nonPositiveDurationsProvider(): array
+    public static function nonPositiveDurationsDataProvider(): array
     {
         return [
             'zero microseconds' => [new Duration(0, TimeUnit::Microseconds)],
@@ -40,7 +40,7 @@ class SystemSleeperTest extends TestCase
     }
 
     #[Test]
-    #[DataProvider('positiveDurationsProvider')]
+    #[DataProvider('positiveDurationsDataProvider')]
     public function sleepCallsInjectedFunctionWithExactMicroseconds(Duration $duration, int $expectedMicroseconds): void
     {
         $sleeper = self::buildSleepMock();
@@ -50,7 +50,7 @@ class SystemSleeperTest extends TestCase
         $sleeper->sleep($duration);
     }
 
-    public static function positiveDurationsProvider(): array
+    public static function positiveDurationsDataProvider(): array
     {
         return [
             '1 microsecond' => [new Duration(1, TimeUnit::Microseconds), 1],

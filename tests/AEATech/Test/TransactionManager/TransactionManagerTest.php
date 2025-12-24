@@ -36,15 +36,15 @@ class TransactionManagerTest extends TestCase
 {
     use MockeryPHPUnitIntegration;
 
-    private ExecutionPlanBuilderInterface $executionPlanBuilder;
-    private ConnectionInterface $connection;
-    private ErrorClassifierInterface $errorClassifier;
-    private SleeperInterface $sleeper;
+    private ExecutionPlanBuilderInterface&m\MockInterface $executionPlanBuilder;
+    private ConnectionInterface&m\MockInterface $connection;
+    private ErrorClassifierInterface&m\MockInterface $errorClassifier;
+    private SleeperInterface&m\MockInterface $sleeper;
     private TransactionManager $tm;
-    private TransactionInterface $tx;
+    private TransactionInterface&m\MockInterface $tx;
     private Query $defaultQuery;
     private TxOptions $defaultTxOptions;
-    private BackoffStrategyInterface $defaultBackoff;
+    private BackoffStrategyInterface&m\MockInterface $defaultBackoff;
 
     protected function setUp(): void
     {

@@ -120,7 +120,7 @@ class ExponentialBackoffTest extends TestCase
     }
 
     #[Test]
-    #[DataProvider('invalidMultiplierProvider')]
+    #[DataProvider('invalidMultiplierDataProvider')]
     public function createWithInvalidMultiplierThrows(float $multiplier): void
     {
         $this->expectException(InvalidArgumentException::class);
@@ -129,7 +129,7 @@ class ExponentialBackoffTest extends TestCase
         new ExponentialBackoff(100, 1000, $multiplier, 0);
     }
 
-    public static function invalidMultiplierProvider(): array
+    public static function invalidMultiplierDataProvider(): array
     {
         return [
             ['multiplier' => 1.0],
