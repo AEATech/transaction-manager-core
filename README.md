@@ -359,7 +359,7 @@ done
 
 ## 4. Run phpstan
 ```bash
-docker-compose -p aeatech-transaction-manager-core -f docker/docker-compose.yml exec php-cli-8.4 vendor/bin/phpstan analyse -c phpstan.neon
+docker-compose -p aeatech-transaction-manager-core -f docker/docker-compose.yml exec php-cli-8.4 vendor/bin/phpstan analyse -c phpstan.neon --memory-limit=1G
 ```
 
 ## Stopping the Environment
