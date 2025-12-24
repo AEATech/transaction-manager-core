@@ -98,23 +98,6 @@ class ExecutionPlanBuilderTest extends TestCase
      * @throws Throwable
      */
     #[Test]
-    public function buildThrowsForInvalidElementType(): void
-    {
-        $builder = new ExecutionPlanBuilder();
-
-        $invalid = new class() {
-        };
-
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('All elements of the iterable must implement TransactionInterface');
-
-        $builder->build([$invalid]);
-    }
-
-    /**
-     * @throws Throwable
-     */
-    #[Test]
     public function buildPropagatesExceptionFromTransactionBuildAndStopsProcessing(): void
     {
         $builder = new ExecutionPlanBuilder();

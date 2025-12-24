@@ -17,12 +17,6 @@ class ExecutionPlanBuilder implements ExecutionPlanBuilderInterface
 
         if (is_iterable($txs)) {
             foreach ($txs as $tx) {
-                if (!$tx instanceof TransactionInterface) {
-                    throw new InvalidArgumentException(
-                        'All elements of the iterable must implement TransactionInterface'
-                    );
-                }
-
                 $steps[] = self::transactionToStep($tx);
                 $isIdempotent = $isIdempotent && $tx->isIdempotent();
             }
