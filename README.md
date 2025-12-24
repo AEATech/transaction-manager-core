@@ -319,7 +319,7 @@ class InsertUser implements TransactionInterface
 
 The project is configured to run tests in Isolated Docker containers for different PHP versions (8.2, 8.3, 8.4).
 
-### 1. Start the Environment
+## 1. Start the Environment
 
 Make sure the Docker containers are up and running. From the project root:
 
@@ -327,7 +327,7 @@ Make sure the Docker containers are up and running. From the project root:
 docker-compose -p aeatech-transaction-manager-core -f docker/docker-compose.yml up -d --build
 ```
 
-### 2. Install Dependencies
+## 2. Install Dependencies
 Install composer dependencies inside the container (using PHP 8.2 as a base):
 ```bash
 docker-compose -p aeatech-transaction-manager-core -f docker/docker-compose.yml exec php-cli-8.2 composer install
@@ -349,12 +349,17 @@ PHP 8.4
 docker-compose -p aeatech-transaction-manager-core -f docker/docker-compose.yml exec php-cli-8.4 vendor/bin/phpunit
 ```
 
-### 4. Run All Tests (Bash Script)
+Run All Tests (Bash Script)
 ```bash
 for v in 8.2 8.3 8.4; do \
     echo "Testing PHP $v..."; \
     docker-compose -p aeatech-transaction-manager-core -f docker/docker-compose.yml exec php-cli-$v vendor/bin/phpunit || break; \
 done
+```
+
+## 4. Run phpstan
+```bash
+docker-compose -p aeatech-transaction-manager-core -f docker/docker-compose.yml exec php-cli-8.4 vendor/bin/phpstan analyse -c phpstan.neon
 ```
 
 ## Stopping the Environment
