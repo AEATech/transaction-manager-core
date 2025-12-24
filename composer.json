@@ -30,7 +30,10 @@
         "exclude": [
             "/docker",
             "/tests",
-            "/phpunit.xml"
+            "/phpunit.xml",
+            "/phpstan.neon",
+            "/.build",
+            "/.github"
         ]
     }
 }
