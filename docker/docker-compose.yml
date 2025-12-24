@@ -10,9 +10,6 @@ services:
         working_dir: /app
         volumes:
             - ../../transaction-manager-core:/app:rw
-            - /home/${USER}/.ssh:/home/${USER}/.ssh:ro
-        extra_hosts:
-            - 'host.docker.internal:host-gateway'
     php-cli-8.3:
         build:
             context: 8.3/
@@ -23,9 +20,6 @@ services:
         working_dir: /app
         volumes:
             - ../../transaction-manager-core:/app:rw
-            - /home/${USER}/.ssh:/home/${USER}/.ssh:ro
-        extra_hosts:
-            - 'host.docker.internal:host-gateway'
     php-cli-8.4:
         build:
             context: 8.4/
@@ -36,6 +30,3 @@ services:
         working_dir: /app
         volumes:
             - ../../transaction-manager-core:/app:rw
-            - /home/${USER}/.ssh:/home/${USER}/.ssh:ro
-        extra_hosts:
-            - 'host.docker.internal:host-gateway'
