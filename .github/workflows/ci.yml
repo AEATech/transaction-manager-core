@@ -51,9 +51,9 @@ jobs:
               if: matrix.php == '8.2'
               uses: timkrase/phpunit-coverage-badge@v1.2.1
               with:
-                  report_type: clover
-                  report_path: .build/clover.xml
-                  badge_path: .build/coverage_badge.svg
+                  report: .build/clover.xml
+                  coverage_badge_path: .build/coverage_badge.svg
+                  push_badge: false
 
             - name: Upload coverage artifacts (8.2)
               if: matrix.php == '8.2'
