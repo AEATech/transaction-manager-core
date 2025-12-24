@@ -40,6 +40,7 @@ interface TransactionManagerInterface
      *     - All vendor/DBAL exceptions are propagated as-is.
      *
      * @param TransactionInterface|iterable $txs Single transaction or collection of transactions
+     * @phpstan-param TransactionInterface|iterable<TransactionInterface> $txs
      * @param TxOptions $opt Transaction options (isolation level, retry settings)
      *
      * @return RunResult Contains execution results (e.g., affected rows)
@@ -48,7 +49,6 @@ interface TransactionManagerInterface
      * @throws LogicException Thrown when the TransactionManager cannot safely take control over the database transaction
      * — For example, the underlying connection already has an active transaction
      * (TransactionManager requires exclusive control over BEGIN/COMMIT/ROLLBACK);
-     *
      * @throws Throwable
      */
     public function run(TransactionInterface|iterable $txs, TxOptions $opt = new TxOptions()): RunResult;

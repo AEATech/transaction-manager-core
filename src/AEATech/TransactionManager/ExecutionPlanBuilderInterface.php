@@ -9,7 +9,8 @@ use Throwable;
 interface ExecutionPlanBuilderInterface
 {
     /**
-     * @param iterable|TransactionInterface $txs
+     * @param TransactionInterface|iterable $txs
+     * @phpstan-param TransactionInterface|iterable<TransactionInterface> $txs
      *
      * @return ExecutionPlan
      *

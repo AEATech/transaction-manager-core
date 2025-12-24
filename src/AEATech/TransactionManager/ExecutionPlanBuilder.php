@@ -15,13 +15,7 @@ class ExecutionPlanBuilder implements ExecutionPlanBuilderInterface
         $isIdempotent = true;
         $steps = [];
 
-        if ($txs instanceof TransactionInterface) {
-            $steps = [
-                self::transactionToStep($txs),
-            ];
-
-            $isIdempotent = $txs->isIdempotent();
-        } else {
+        if (is_iterable($txs)) {
             foreach ($txs as $tx) {
                 if (!$tx instanceof TransactionInterface) {
                     throw new InvalidArgumentException(
@@ -32,6 +26,12 @@ class ExecutionPlanBuilder implements ExecutionPlanBuilderInterface
                 $steps[] = self::transactionToStep($tx);
                 $isIdempotent = $isIdempotent && $tx->isIdempotent();
             }
+        } else {
+            $steps = [
+                self::transactionToStep($txs),
+            ];
+
+            $isIdempotent = $txs->isIdempotent();
         }
 
         if (count($steps) === 0) {

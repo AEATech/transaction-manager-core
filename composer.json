@@ -12,6 +12,7 @@
     },
     "require-dev": {
         "mockery/mockery": "^1.6.10",
+        "phpstan/phpstan": "^2.1",
         "phpunit/phpunit": "^11.5",
         "roave/security-advisories": "dev-master"
     },
